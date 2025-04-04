@@ -101,7 +101,3 @@ The CropNet dataset is the primary data source for this project. It provides a c
 3.  *Justification & Lecture Link (Unit 3):* This implements a fully automated, reproducible MLOps workflow using IaC, GitOps, CI/CD/CT pipelines, containerization, and staged deployments, directly applying the core DevOps and cloud-native principles from Unit 3.
 4.  *Specifics & Requirements:* Terraform/python-chi defines infra. K8s YAML defines apps. This satisfies **Unit 3** (IaC, Cloud-native principles, CI/CD/CT pipeline, Staged deployment).
 7.  *Difficulty Points Attempted:* *Unit 1: Composed of multiple models.* (The system design inherently supports multiple interacting models - yield predictor, potentially recommender, integrated and managed via this Continuous X pipeline).
-
----
-
-This version aims to be clearer and less overwhelming while still hitting the key requirements for the proposal. Let me know if you'd like any specific part adjusted further!
