@@ -1,0 +1,39 @@
+\
+# Git files
+.git/
+.gitignore
+
+# Python cache and virtual environment files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env*
+!.env.example
+
+# IDE and OS files
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Test files
+tests/
+*.test.py
+pytest.cache/
+.pytest_cache/
+
+# Data and large files (adjust if needed)
+data/
+experiments/
+*.jpeg
+*.png
+
+# Other project directories not needed for serving
+model_training/
+devops/
+docs/

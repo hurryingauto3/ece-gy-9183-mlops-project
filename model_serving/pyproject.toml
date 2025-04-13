@@ -1,0 +1,36 @@
+[tool.poetry]
+name = "model-serving"
+version = "0.1.0"
+description = "FastAPI service for AgriYield model prediction"
+authors = ["Your Name <you@example.com>"] # Please update author info
+readme = "README.md" # Optional: Add a README specific to model_serving if desired
+packages = [{include = "model_serving"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = ">=0.100.0,<0.111.0"
+uvicorn = {extras = ["standard"], version = ">=0.20.0,<0.28.0"}
+pydantic = ">=2.0.0,<3.0.0"
+mlflow = ">=2.0.0,<3.0.0"
+pandas = ">=1.5.0,<2.3.0"
+requests = ">=2.28.0,<2.32.0"
+PyYAML = ">=6.0,<7.0"
+pydantic-settings = ">=2.0.0,<3.0.0"
+httpx = "==0.23.*"
+prometheus-fastapi-instrumentator = "^6.1.0" # For Prometheus metrics
+slowapi = "^0.1.9" # For rate limiting
+structlog = "^23.0.0" # For structured logging
+tenacity = "^8.2.0" # For retry logic
+prometheus-client = "^0.19.0" # Core client library for custom metrics
+# Add data_pipeline dependencies here if needed directly by model_serving
+# Example: If data_pipeline/fetch.py needs 'some-library', add it:
+# some-library = "^1.2.3"
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=7.0.0,<8.0.0"
+pytest-asyncio = "^0.21.0" # Add dependency for async tests
+pytest-httpx = "^0.21.0" # Add dependency for mocking httpx requests
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
