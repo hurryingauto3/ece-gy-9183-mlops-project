@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
 WORKDIR /build
 
 # Copy only files needed for dependency installation
-COPY model_serving/pyproject.toml model_serving/poetry.lock* /build/
+COPY pyproject.toml poetry.lock* /build/
 
 # Install dependencies and export requirements
 # --without dev: Exclude development dependencies like pytest from the export
@@ -36,8 +36,7 @@ COPY --from=builder /build/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy application code from build context
-# Ensure this path matches the location of your app code relative to Dockerfile
-COPY model_serving /app/model_serving
+COPY . /app/model_serving
 
 # Set environment variables
 ENV MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}
