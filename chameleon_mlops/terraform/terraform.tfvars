@@ -1,0 +1,6 @@
+openstack_cloud
+ssh_key_name
+public_key_path
+gpu_reservation_id
+services_flavor
+image
