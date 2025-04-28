@@ -62,7 +62,7 @@ def main():
     logger = setup_logger()
     download_folder(
         folder_id="1Js98GAxf1LeAUTxP1JMZZIrKvyJStDgz",
-        output_dir="./drive_data",
+        output_dir="./data_lake",
         quiet=False,
         use_cookies=True,
         retries=True,

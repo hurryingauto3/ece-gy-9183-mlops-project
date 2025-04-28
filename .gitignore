@@ -2,6 +2,8 @@
 __pycache__/
 *.py[cod]
 *$py.class
+# Drive data folder
+drive_data/
 
 # C extensions
 *.so
