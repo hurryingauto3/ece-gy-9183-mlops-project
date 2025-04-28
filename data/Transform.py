@@ -86,7 +86,8 @@ for sub_dir in tqdm(sub_dirs, desc="Processing subdirectories"):
 def process_fips_year_timeseries(data_lake_path="data_lake/HRRR/data/", output_base="data_lake_organized/"):
     """
     Processes the HRRR data to create full year weather time series per FIPS code,
-    keeping ONLY daily weather data (removing monthly summaries).
+    keeping ONLY daily weather data (removing monthly summaries),
+    skipping first row, dropping useless columns, and aggregating by (Year, Month, Day) to get 365/366 rows.
     """
     base_path = Path(data_lake_path)
     years = [p.name for p in base_path.iterdir() if p.is_dir()]
@@ -104,31 +105,53 @@ def process_fips_year_timeseries(data_lake_path="data_lake/HRRR/data/", output_b
         if not monthly_files:
             continue  # No files for this year
         
-        dfs = [pd.read_csv(f, header=None, names=COLUMNS) for f in monthly_files]
+        # 🧹 SKIP first row (bad header inside the CSV)
+        dfs = [pd.read_csv(f, header=None, names=COLUMNS, skiprows=1) for f in monthly_files]
         full_year_df = pd.concat(dfs, ignore_index=True)
         
         # Drop NaN FIPS just in case
         full_year_df = full_year_df.dropna(subset=['FIPS Code'])
         
-        # 🧹 NEW: Keep only 'Daily' entries
+        # Keep only 'Daily' entries
         full_year_df = full_year_df[full_year_df['Daily/Monthly'] == 'Daily']
         
         # Get unique FIPS codes
         unique_fips = full_year_df['FIPS Code'].unique()
-        
+
         for fips_code in tqdm(unique_fips, desc=f"Processing FIPS codes for {year}", leave=False):
             fips_code_int = int(fips_code)
-            
+
+            # Filter rows for this FIPS
             fips_df = full_year_df[full_year_df['FIPS Code'] == fips_code]
-            
+
+            # Drop irrelevant columns
+            fips_df = fips_df.drop(columns=[
+                'Lat (llcrnr)', 'Lon (llcrnr)', 'Lat (urcrnr)', 'Lon (urcrnr)',
+                'Grid Index', 'Daily/Monthly', 'State', 'County', 'FIPS Code'
+            ])
+
+            # 🛠️ Force all weather columns to numeric
+            for col in [
+                'Avg Temperature (K)', 'Max Temperature (K)', 'Min Temperature (K)',
+                'Precipitation (kg m**-2)', 'Relative Humidity (%)',
+                'Wind Gust (m s**-1)', 'Wind Speed (m s**-1)',
+                'U Component of Wind (m s**-1)', 'V Component of Wind (m s**-1)',
+                'Downward Shortwave Radiation Flux (W m**-2)',
+                'Vapor Pressure Deficit (kPa)'
+            ]:
+                if col in fips_df.columns:
+                    fips_df[col] = pd.to_numeric(fips_df[col], errors='coerce')
+
+            # 🛠️ Group by (Year, Month, Day) and take mean
+            fips_df = fips_df.groupby(['Year', 'Month', 'Day']).mean().reset_index()
+
+            # Save the final clean file
             output_folder = Path(output_base) / str(fips_code_int) / year
             output_folder.mkdir(parents=True, exist_ok=True)
             output_file = output_folder / f"WeatherTimeSeries{year}.csv"
             
             fips_df.to_csv(output_file, index=False)
 
-    print("✅ Completed extracting full-resolution daily FIPS timeseries.")
-# Example usage
+    print("✅ Completed extracting full-resolution daily FIPS timeseries (365/366 rows each).")
+
 process_fips_year_timeseries()
-""" all_files = list_all_files('data_lake/HRRR/data')
-extract_and_save_fips_data(all_files) """
