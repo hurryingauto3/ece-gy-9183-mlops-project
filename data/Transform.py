@@ -1,3 +1,4 @@
+import json
 import pandas as pd
 import os
 from pathlib import Path
@@ -64,13 +65,7 @@ def list_unique_years(base_dir):
     years = {year_dir.name for year_dir in base_dir.iterdir() if year_dir.is_dir()}
     return sorted(years)
 
-## TODO: UNCOMMENT THIS BLOCK TO CREATE FIPS FOLDERS AND YEARS FOLDERS
-base_dir = 'data_lake_organized/'
 
-all_files = list_all_files('data_lake/HRRR/data')
-## Create all FIPS folders from all files in the data lake
-for f in tqdm(all_files, desc="Processing files"):
-    create_fips_folders_from_csv(f)
     
 ## Add in all the years folders to every FIPS folder
 new_base_dir = 'data_lake_organized/'
@@ -154,4 +149,67 @@ def process_fips_year_timeseries(data_lake_path="data_lake/HRRR/data/", output_b
 
     print("✅ Completed extracting full-resolution daily FIPS timeseries (365/366 rows each).")
 
-process_fips_year_timeseries()
+def process_usda_yield_data(usda_base_dir="data_lake/usda/data", output_base_dir="data_lake_organized/"):
+    """
+    Processes USDA crop yield data and creates 4 JSON files (corn.json, cotton.json, etc.)
+    inside EACH county (FIPS) folder under data_lake_organized/{FIPS}/.
+    """
+    crops = [crop.name for crop in Path(usda_base_dir).iterdir() if crop.is_dir()]
+    
+    for crop in tqdm(crops, desc="Processing crops"):
+        crop_path = Path(usda_base_dir) / crop
+        
+        # Dictionary: {fips_code: {year: {production, yield}}}
+        fips_crop_data = {}
+
+        # Process all years for this crop
+        all_years = [year_dir for year_dir in crop_path.iterdir() if year_dir.is_dir()]
+        for year_dir in all_years:
+            year = year_dir.name
+            for csv_file in year_dir.glob("*.csv"):
+                df = pd.read_csv(csv_file)
+                
+                for _, row in df.iterrows():
+                    state_ansi = row.get('state_ansi')
+                    county_ansi = row.get('county_ansi')
+
+                    if pd.isna(state_ansi) or pd.isna(county_ansi):
+                        continue
+                    
+                    # Form the FIPS code
+                    fips_code = str(int(state_ansi)).zfill(2) + str(int(county_ansi)).zfill(3)
+
+                    production = row.get('PRODUCTION, MEASURED IN BU', None)
+                    yield_per_acre = row.get('YIELD, MEASURED IN BU / ACRE', None)
+
+                    if pd.isna(production) or pd.isna(yield_per_acre):
+                        continue
+
+                    if fips_code not in fips_crop_data:
+                        fips_crop_data[fips_code] = {}
+
+                    fips_crop_data[fips_code][year] = {
+                        "production": float(production),
+                        "yield": float(yield_per_acre)
+                    }
+
+        # ✅ Now save one JSON per FIPS
+        for fips_code, year_data in fips_crop_data.items():
+            county_folder = Path(output_base_dir) / fips_code
+            if not county_folder.exists():
+                continue  # Skip FIPS that doesn't exist in your organized folder
+            
+            crop_json_path = county_folder / f"{crop.lower()}.json"
+            with open(crop_json_path, 'w') as f:
+                json.dump(year_data, f, indent=4)
+
+    print("✅ All USDA county-level crop JSONs created successfully!")
+
+# Run the processing functions
+if __name__ == "__main__":
+    base_dir = 'data_lake_organized/'
+    all_files = list_all_files('data_lake/HRRR/data')
+    for f in tqdm(all_files, desc="Processing files"):
+        create_fips_folders_from_csv(f)
+    process_fips_year_timeseries()
+    process_usda_yield_data()
