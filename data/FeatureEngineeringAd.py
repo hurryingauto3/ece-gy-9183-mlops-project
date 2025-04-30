@@ -5,57 +5,58 @@ from pathlib import Path
 from tqdm import tqdm
 from scipy.stats import linregress  # For trend/slope features
 
-def build_advanced_features_csv(
+def build_advanced_features_csv_all_crops(
     data_lake_dir="data_lake_organized/",
-    crop_name="corn",
-    output_csv_path="features_advanced.csv"
+    output_csv_path="features_all_crops.csv"
 ):
     """
-    Builds an advanced features.csv that includes:
-    - Basic weather stats
-    - Growing season only (April–October)
-    - Extreme event counts
-    - Weather trends
-    - Joined with USDA crop yield
+    Builds a features.csv for all 4 crops:
+    - Aggregates weather stats (April–October)
+    - Adds yield from corn, soybeans, cotton, winterwheat (if present)
+    - Result: One row per (FIPS, Year) with up to 4 yield targets
     """
+    crops = ["corn", "soybeans", "cotton", "winterwheat"]
     all_rows = []
     data_lake_path = Path(data_lake_dir)
     fips_folders = [f for f in data_lake_path.iterdir() if f.is_dir()]
 
     for fips_folder in tqdm(fips_folders, desc="Processing FIPS codes"):
         fips_code = fips_folder.name
-        
-        crop_json_path = fips_folder / f"{crop_name.lower()}.json"
-        if not crop_json_path.exists():
-            continue
-        
-        with open(crop_json_path, 'r') as f:
-            yield_data = json.load(f)
-        
+
+        # Load all USDA crop yield data into one dict
+        crop_yield = {crop: {} for crop in crops}
+        for crop in crops:
+            crop_path = fips_folder / f"{crop}.json"
+            if crop_path.exists():
+                with open(crop_path, 'r') as f:
+                    crop_yield[crop] = json.load(f)
+
+        # Process weather files for each year
         year_folders = [y for y in fips_folder.iterdir() if y.is_dir()]
-        
         for year_folder in year_folders:
             year = year_folder.name
             weather_csv = year_folder / f"WeatherTimeSeries{year}.csv"
-            
             if not weather_csv.exists():
-                continue
-            if year not in yield_data:
                 continue
             
             df = pd.read_csv(weather_csv)
-            
-            # ✅ Filter for growing season: April (4) to October (10)
-            df = df[(df['Month'] >= 4) & (df['Month'] <= 10)]
+            df = df[(df['Month'] >= 4) & (df['Month'] <= 10)]  # Growing season filter
 
             feature_row = {
                 'FIPS': fips_code,
                 'Year': year,
-                'Yield (bu/acre)': yield_data[year]['yield'],
-                'Production (bu)': yield_data[year]['production'],
             }
 
-            # List of weather columns to process
+            # Add available yields
+            for crop in crops:
+                if year in crop_yield[crop]:
+                    feature_row[f"Yield_{crop}"] = crop_yield[crop][year]['yield']
+                    feature_row[f"Production_{crop}"] = crop_yield[crop][year]['production']
+                else:
+                    feature_row[f"Yield_{crop}"] = None
+                    feature_row[f"Production_{crop}"] = None
+
+            # Weather features to summarize
             weather_columns = [
                 'Avg Temperature (K)', 'Max Temperature (K)', 'Min Temperature (K)',
                 'Precipitation (kg m**-2)', 'Relative Humidity (%)',
@@ -64,8 +65,7 @@ def build_advanced_features_csv(
                 'Downward Shortwave Radiation Flux (W m**-2)',
                 'Vapor Pressure Deficit (kPa)'
             ]
-            
-            # ✅ Basic aggregation: mean, std, min, max
+
             for col in weather_columns:
                 if col in df.columns:
                     feature_row[f"{col} Mean"] = df[col].mean()
@@ -73,35 +73,29 @@ def build_advanced_features_csv(
                     feature_row[f"{col} Max"] = df[col].max()
                     feature_row[f"{col} Min"] = df[col].min()
 
-            # ✅ Extreme event counts
+            # Extreme events
             if 'Max Temperature (K)' in df.columns:
-                hot_days = (df['Max Temperature (K)'] > 308.15).sum()  # 35°C in Kelvin
-                cold_days = (df['Min Temperature (K)'] < 278.15).sum()  # 5°C in Kelvin
-                feature_row['Hot Days >35C'] = hot_days
-                feature_row['Cold Days <5C'] = cold_days
-            
+                feature_row['Hot Days >35C'] = (df['Max Temperature (K)'] > 308.15).sum()
+                feature_row['Cold Days <5C'] = (df['Min Temperature (K)'] < 278.15).sum()
             if 'Precipitation (kg m**-2)' in df.columns:
-                heavy_rain_days = (df['Precipitation (kg m**-2)'] > 10).sum()
-                dry_days = (df['Precipitation (kg m**-2)'] < 1).sum()
-                feature_row['Heavy Rain Days >10mm'] = heavy_rain_days
-                feature_row['Dry Days <1mm'] = dry_days
+                feature_row['Heavy Rain Days >10mm'] = (df['Precipitation (kg m**-2)'] > 10).sum()
+                feature_row['Dry Days <1mm'] = (df['Precipitation (kg m**-2)'] < 1).sum()
 
-            # ✅ Trend features (Slope over time)
+            # Trends
             if 'Avg Temperature (K)' in df.columns:
                 x = range(len(df))
-                slope, intercept, r_value, p_value, std_err = linregress(x, df['Avg Temperature (K)'])
+                slope, *_ = linregress(x, df['Avg Temperature (K)'])
                 feature_row['Avg Temp Trend (slope)'] = slope
-
             if 'Precipitation (kg m**-2)' in df.columns:
                 x = range(len(df))
-                slope, intercept, r_value, p_value, std_err = linregress(x, df['Precipitation (kg m**-2)'])
+                slope, *_ = linregress(x, df['Precipitation (kg m**-2)'])
                 feature_row['Precipitation Trend (slope)'] = slope
 
             all_rows.append(feature_row)
 
+    # Combine and export
     final_df = pd.DataFrame(all_rows)
     final_df.to_csv(output_csv_path, index=False)
-    print(f"✅ Advanced features CSV created: {output_csv_path}")
-
-# Example usage:
-build_advanced_features_csv(crop_name="corn", output_csv_path="features_corn_advanced.csv")
+    print(f"✅ Multi-crop features CSV created: {output_csv_path}")
+    
+build_advanced_features_csv_all_crops()
