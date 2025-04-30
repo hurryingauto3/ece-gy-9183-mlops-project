@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "model-training"
+version = "0.1.0"
+description = "LSTM-TCN based crop yield prediction pipeline"
+authors = ["Your Name <you@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+torch = "^2.1.0"
+pandas = "^2.2.1"
+scikit-learn = "^1.4.2"
+tqdm = "^4.66.2"
+numpy = "^1.26.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
