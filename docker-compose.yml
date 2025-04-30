@@ -1,11 +1,8 @@
-# docker-compose.yaml
-version: '3.8'
-
 services:
 
   # --- New MLflow Service ---
   mlflow:
-    image: mlflow/mlflow:latest
+    image: ghcr.io/mlflow/mlflow:v2.0.1
     container_name: mlflow-container
     ports:
       - "5000:5000"
@@ -39,7 +36,7 @@ services:
   # --- ETL Job Service ---
   etl-job:
     build:
-      context: ./ETL # Corrected context
+      context: ./etl_pipeline
       dockerfile: Dockerfile
     container_name: etl
     restart: "no"
