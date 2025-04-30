@@ -1,0 +1,65 @@
+# devops/ansible/deploy_services.yaml
+# Playbook to build images and deploy core services on the CPU VM.
+
+- name: Deploy Core Services on CPU VM
+  hosts: cpu_vms # Target only the CPU VMs group
+  tasks:
+    - name: Navigate to project directory
+      ansible.builtin.shell: cd "{{ project_remote_path }}"
+      args:
+        chdir: "{{ project_remote_path }}" # Change directory before running commands
+
+    - name: Build all Docker Compose service images
+      # Run from the remote project directory
+      community.docker.docker_compose_build:
+        project_src: "{{ project_remote_path }}"
+        # Optional: Specify services to build if you don't want to build jobs here
+        # services:
+        #   - feature-service
+        #   - model-serving
+        #   - mlflow
+        #   - prometheus
+        #   - grafana
+      # Need to pass the .env file path if it's not the default ./env
+      # env_file: .env # Assumes .env is in project_src
+      # Or ensure environment variables are set before this task (less common for compose)
+      # environment: # This sets env vars for the ansible task, not docker compose build directly
+      #   - FS_OPENSTACK_AUTH_URL={{ lookup('env', 'FS_OPENSTACK_AUTH_URL') }}
+      #   ...
+
+    - name: Start core Docker Compose services
+      # Run from the remote project directory
+      community.docker.docker_compose:
+        project_src: "{{ project_remote_path }}"
+        state: present # Ensure services are running
+        detached: true # Run containers in the background
+        services:
+          - feature-service
+          - model-serving
+          - mlflow
+          - prometheus
+          - grafana
+        # Need to pass the .env file path if it's not the default ./env
+        # env_file: .env # Assumes .env is in project_src
+        # Or ensure environment variables are set before this task
+        # environment: # This sets env vars for the ansible task, not docker compose up
+        #   - FS_OPENSTACK_AUTH_URL={{ lookup('env', 'FS_OPENSTACK_AUTH_URL') }}
+        #   ...
+
+    - name: Wait for model-serving to be healthy (optional but good practice)
+      # Need to install `docker` python library on the remote host for this module
+      # (Done in vm_setup.yaml if community.docker.docker_compose_build/compose is used)
+      community.docker.docker_container_info:
+        name: model-serving-container # Use the container name from docker-compose.yaml
+      register: model_serving_info
+      until: >
+        model_serving_info.containers | length > 0 and
+        model_serving_info.containers[0].state.status == 'running' and
+        (model_serving_info.containers[0].state.health is not defined or model_serving_info.containers[0].state.health.status == 'healthy')
+      retries: 30 # Retry up to 30 times
+      delay: 10 # Wait 10 seconds between retries
+      ignore_errors: yes # Don't fail the playbook if health check isn't defined/ready
+
+    - name: Report CPU VM status (optional)
+      ansible.builtin.debug:
+        msg: "Core services should be running on {{ inventory_hostname }}. Check with 'docker compose ps' inside the VM."

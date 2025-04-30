@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "drive-to-swift-etl"
+version = "0.1.0"
+description = "Downloads Google Drive folder and uploads to OpenStack Swift"
+authors = ["Your Name <you@example.com>"]
+license = "MIT" # Or your preferred license
+readme = "README.md" # Optional
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.9" # Or your target Python version
+gdown = "^4.7.1" # Use appropriate versions
+openstacksdk = "^0.60.0" # Use appropriate versions
+
+[tool.poetry.group.dev.dependencies]
+# Add dev dependencies here if needed (e.g., pytest, flake8)
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

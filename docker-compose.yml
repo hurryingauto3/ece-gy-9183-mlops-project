@@ -2,59 +2,214 @@
 version: '3.8'
 
 services:
+
+  # --- New MLflow Service ---
+  mlflow:
+    image: mlflow/mlflow:latest # Use the official MLflow image
+    container_name: mlflow-container
+    ports:
+      - "5000:5000" # Expose MLflow UI/Tracking port
+    environment:
+      # Configure MLflow to use Swift for artifact storage
+      # These OS_* variables are read by MLflow's SwiftArtifactRepository
+      - OS_AUTH_URL=${FS_OPENSTACK_AUTH_URL}
+      - OS_PROJECT_NAME=${FS_OPENSTACK_PROJECT_NAME}
+      - OS_PROJECT_DOMAIN_NAME=${FS_OPENSTACK_PROJECT_DOMAIN_NAME}
+      - OS_USERNAME=${FS_OPENSTACK_USERNAME}
+      - OS_USER_DOMAIN_NAME=${FS_OPENSTACK_USER_DOMAIN_NAME}
+      - OS_PASSWORD=${FS_OPENSTACK_PASSWORD} # Sensitive! Pass via .env or runtime env var.
+      - OS_REGION_NAME=${FS_OPENSTACK_REGION_NAME} # Optional
+      - MLFLOW_S3_ENDPOINT_URL= # Swift uses a different endpoint, leave this blank for OpenStack
+      - MLFLOW_S3_IGNORE_TLS=true # Set to true if using non-HTTPS endpoint (adjust as needed)
+      - MLFLOW_S3_REGION_NAME=${FS_OPENSTACK_REGION_NAME} # May or may not be used by Swift backend
+      # Configure the backend store (for metadata). Default is SQLite, acceptable for single VM.
+      # For production, consider Postgres.
+      - MLFLOW_BACKEND_STORE_URI=sqlite:///mlflow/backend/mlflow.db
+      # Point artifacts to Swift
+      - MLFLOW_ARTIFACT_LOCATION=swift://${FS_OPENSTACK_SWIFT_CONTAINER_NAME}/mlflow-artifacts # Use swift scheme
+
+    volumes:
+      # Persistent storage for the backend database (metadata)
+      - mlflow_tracking_data:/mlflow/backend
+      # Persistent storage for artifacts (optional if using Swift exclusively, but good for fallback/local testing)
+      # If MLFLOW_ARTIFACT_LOCATION points to swift, this volume is less critical for artifacts
+      - mlflow_artifact_data:/mlflow/artifacts
+      # Mount the data_lake_organized directory if MLflow needs direct access for any reason
+      # (Less likely now that FS reads from Swift, but keep in mind)
+      # - /path/on/host/data_lake_organized:/data_lake_organized # Example
+
+    # Add labels for Prometheus scraping if you instrument MLflow itself
+    # labels:
+    #   prometheus-scrape: "true"
+    #   prometheus-port: "5000" # MLflow doesn't expose standard /metrics, might need exporter or custom scraping
+
+    restart: unless-stopped # MLflow should be a continuously running service
+
+  # --- ETL Job Service ---
+  # This service defines the image and command for the one-off/scheduled ETL job.
+  # It's NOT started automatically with `docker compose up`.
+  # It's run explicitly using `docker compose run etl-job`.
+  etl-job:
+    build:
+      context: ./etl_pipeline
+      dockerfile: Dockerfile
+    container_name: etl # Optional: Use a consistent name pattern if desired, e.g., etl-job-{{.Run.ID}} for runs
+    # The default command in the Dockerfile or overridden when using `docker compose run`.
+    # We usually don't set a static command here for a run-once job.
+    # command: python drive_to_swift_etl.py # Better to pass args via docker compose run
+
+    # Pass OpenStack Swift credentials from the environment
+    environment:
+      - FS_OPENSTACK_AUTH_URL=${FS_OPENSTACK_AUTH_URL}
+      - FS_OPENSTACK_PROJECT_NAME=${FS_OPENSTACK_PROJECT_NAME}
+      - FS_OPENSTACK_PROJECT_DOMAIN_NAME=${FS_OPENSTACK_PROJECT_DOMAIN_NAME}
+      - FS_OPENSTACK_USERNAME=${FS_OPENSTACK_USERNAME}
+      - FS_OPENSTACK_USER_DOMAIN_NAME=${FS_OPENSTACK_USER_DOMAIN_NAME}
+      - FS_OPENSTACK_PASSWORD=${FS_OPENSTACK_PASSWORD}
+      - FS_OPENSTACK_REGION_NAME=${FS_OPENSTACK_REGION_NAME}
+      - FS_OPENSTACK_SWIFT_CONTAINER_NAME=${FS_OPENSTACK_SWIFT_CONTAINER_NAME}
+      # Add other OS_* variables if using app credentials or different auth methods
+    restart: "no" # Essential for batch jobs
+
+  # --- Model Training Job Service ---
+  # Defines the image and command for the training job.
+  # Similar to ETL, it's run explicitly via `docker compose run model-training`.
+  model-training:
+    build:
+      context: ./model_training # Assuming you create this directory and Dockerfile
+      dockerfile: Dockerfile
+    # container_name: model-training # Don't use a static name for run-once jobs
+    # Default command or override via `docker compose run`
+    # command: python train_job.py # E.g., your new training script
+
+    # Pass configuration to the training script
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000 # Connect to the MLflow service
+      - MLFLOW_MODEL_NAME=AgriYieldPredictor # For model registration
+      - MLFLOW_MODEL_STAGE=Production       # For model registration stage (or maybe 'Staging' initially)
+      # Pass OpenStack Swift credentials for reading data
+      - FS_OPENSTACK_AUTH_URL=${FS_OPENSTACK_AUTH_URL}
+      - FS_OPENSTACK_PROJECT_NAME=${FS_OPENSTACK_PROJECT_NAME}
+      - FS_OPENSTACK_PROJECT_DOMAIN_NAME=${FS_OPENSTACK_PROJECT_DOMAIN_NAME}
+      - FS_OPENSTACK_USERNAME=${FS_OPENSTACK_USERNAME}
+      - FS_OPENSTACK_USER_DOMAIN_NAME=${FS_OPENSTACK_USER_DOMAIN_NAME}
+      - FS_OPENSTACK_PASSWORD=${FS_OPENSTACK_PASSWORD}
+      - FS_OPENSTACK_REGION_NAME=${FS_OPENSTACK_REGION_NAME}
+      - FS_OPENSTACK_SWIFT_CONTAINER_NAME=${FS_OPENSTACK_SWIFT_CONTAINER_NAME} # For reading data
+      # Pass training hyperparameters
+      # - TRAIN_EPOCHS=50
+      # - TRAIN_LR=0.001
+      # - TRAIN_HOLDOUT_YEAR=2022 # Or derive this dynamically
+
+    # Optional: Mount a volume for training logs or temporary outputs
+    # volumes:
+    #   - /home/cc/agri-mlops/logs:/app/logs
+
+    restart: "no" # Essential for batch jobs
+    # depends_on: # Batch jobs don't use depends_on; they rely on other services being *available*
+    #   - mlflow # Connection check should be in the script
+
+  # --- Feature Service ---
+  feature-service:
+    build:
+      context: ./feature_serving # Corrected from feature_service
+      dockerfile: Dockerfile
+    container_name: feature-service-container
+    ports:
+      # Expose externally if needed for direct access (e.g., debugging)
+      # - "8001:8001"
+      # Otherwise, rely on internal Docker network
+      - target: 8001 # Expose internally on the bridge network by service name
+        published: 8001 # Map to host port (optional, only if needed externally)
+        protocol: tcp
+        mode: ingress # Publish mode (relevant for Swarm, but works for single node)
+    environment:
+      # Pass OpenStack credentials and container name for feature service
+      - FS_OPENSTACK_AUTH_URL=${FS_OPENSTACK_AUTH_URL}
+      - FS_OPENSTACK_PROJECT_NAME=${FS_OPENSTACK_PROJECT_NAME}
+      - FS_OPENSTACK_PROJECT_DOMAIN_NAME=${FS_OPENSTACK_PROJECT_DOMAIN_NAME}
+      - FS_OPENSTACK_USERNAME=${FS_OPENSTACK_USERNAME}
+      - FS_OPENSTACK_USER_DOMAIN_NAME=${FS_OPENSTACK_USER_DOMAIN_NAME}
+      - FS_OPENSTACK_PASSWORD=${FS_OPENSTACK_PASSWORD}
+      - FS_OPENSTACK_REGION_NAME=${FS_OPENSTACK_REGION_NAME}
+      - FS_OPENSTACK_SWIFT_CONTAINER_NAME=${FS_OPENSTACK_SWIFT_CONTAINER_NAME}
+      # - LOG_LEVEL=INFO # Example optional variable
+    restart: unless-stopped
+    # volumes: # Optional dev volumes
+    #   - ./feature_serving:/app # Corrected from feature_service
+
+  # --- Model Serving Service ---
   model-serving:
     build:
       context: ./model_serving
       dockerfile: Dockerfile
-    container_name: model-serving
+    container_name: model-serving-container
     ports:
-      - "8000:8000" # Expose app port to host
+      - "8000:8000" # Expose app port to host (or expose internally if using reverse proxy)
     environment:
-      # Add any necessary environment variables for your app
-      # Example: Assuming MLflow runs elsewhere or is mocked for local testing
-      - MLFLOW_TRACKING_URI=http://host.docker.internal:5000 # Or appropriate value
-      - FEATURE_SERVICE_URL=http://host.docker.internal:5001 # Or appropriate value
-      # Add other env vars like feature service URL if needed
-    # volumes: # Optional: Mount code for live reload during development
+      # Point to the feature-service container using its service name and internal port
+      - FEATURE_SERVICE_URL=http://feature-service:8001
+      # Point to the MLflow container using its service name and internal port
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_MODEL_NAME=AgriYieldPredictor
+      - MLFLOW_MODEL_STAGE=Production # Load the model from this stage
+      - API_PREDICT_LIMIT=${API_PREDICT_LIMIT}
+      - API_PREDICT_BATCH_LIMIT=${API_PREDICT_BATCH_LIMIT}
+      # - LOG_LEVEL=INFO # Example optional variable
+    # volumes: # Optional dev volumes
     #   - ./model_serving:/app
     restart: unless-stopped
+    # Dependencies: Ensure services are running *before* trying to start this one.
+    # model-serving needs Feature Service for data and MLflow to load the model.
+    depends_on:
+      - feature-service
+      - mlflow
+      # - etl-job # No direct dependency; ETL is a one-off job run earlier.
 
+  # --- Prometheus Service ---
   prometheus:
     image: prom/prometheus:latest
-    container_name: prometheus
+    container_name: prometheus-container
     ports:
-      - "9090:9090" # Expose Prometheus UI port
+      - "9090:9090" # Expose Prometheus UI port (careful in production)
     volumes:
-      - ./devops/docker-compose/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus # Optional: Named volume for persistence
+      - ./devops/docker-compose/prometheus.yml:/etc/prometheus/prometheus.yml # Mount config
+      - prometheus_data:/prometheus # Persistent storage for time-series data
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus' # Store data in the volume
+      - '--storage.tsdb.path=/prometheus'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
     restart: unless-stopped
+    # Dependency: Prometheus needs the service it scrapes (model-serving) to be running
     depends_on:
-      - model-serving # Wait for model-serving DNS entry, not necessarily readiness
+      - model-serving
 
+  # --- Grafana Service ---
   grafana:
     image: grafana/grafana:latest
-    container_name: grafana
+    container_name: grafana-container
     ports:
-      - "3000:3000" # Expose Grafana UI port
+      - "3000:3000" # Expose Grafana UI port (careful in production)
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning # Provisioning path
     volumes:
+      # Mount provisioning files
       - ./devops/docker-compose/grafana/provisioning:/etc/grafana/provisioning
-      # Mount dashboard JSON files into the path defined in dashboards.yml provider
+      # Mount dashboard definition files (referenced by dashboards.yml)
       - ./devops/docker-compose/grafana/dashboards:/etc/grafana/provisioning/dashboards
-      - grafana_data:/var/lib/grafana # Optional: Named volume for persistence
+      # Persistent storage for Grafana database, config, etc.
+      - grafana_data:/var/lib/grafana
     restart: unless-stopped
+    # Dependency: Grafana needs its data source (Prometheus) to be running
     depends_on:
-      - prometheus # Ensure Prometheus is available for data source connection
+      - prometheus
 
-# Optional: Define named volumes for data persistence
+# Define named volumes for data persistence
 volumes:
+  mlflow_tracking_data: # For MLflow backend metadata (e.g., SQLite DB)
+  mlflow_artifact_data: # For MLflow artifacts (optional if using Swift backend exclusively)
   prometheus_data:
   grafana_data:

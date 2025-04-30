@@ -1,0 +1,67 @@
+
+# devops/ansible/run_initial_etl.yaml
+# Playbook to run the one-off ETL job on the CPU VM.
+
+- name: Run Initial ETL Job
+  hosts: cpu_vms # Target only the CPU VMs group
+  tasks:
+    - name: Navigate to project directory
+      ansible.builtin.shell: cd "{{ project_remote_path }}"
+      args:
+        chdir: "{{ project_remote_path }}" # Change directory before running commands
+
+    - name: Run ETL job container
+      # Use docker_compose module to run the service once
+      community.docker.docker_compose:
+        project_src: "{{ project_remote_path }}"
+        services:
+          - etl-job # The service name from docker-compose.yaml
+        # Use `command` to override the default command (if any) and pass arguments
+        # Pass Google Drive ID and Swift container name here
+        command: "python drive_to_swift_etl.py {{ lookup('env', 'GOOGLE_DRIVE_FOLDER_ID') }} --swift-container {{ lookup('env', 'FS_OPENSTACK_SWIFT_CONTAINER_NAME') }} --retry 5 --clean --quiet"
+        # Pass environment variables required by the ETL script
+        # These are read from the environment *Ansible is running from* (local machine)
+        environment:
+          - OS_AUTH_URL={{ lookup('env', 'OS_AUTH_URL') }}
+          - OS_PROJECT_NAME={{ lookup('env', 'OS_PROJECT_NAME') }}
+          - OS_PROJECT_DOMAIN_NAME={{ lookup('env', 'OS_PROJECT_DOMAIN_NAME') }}
+          - OS_USERNAME={{ lookup('env', 'OS_USERNAME') }}
+          - OS_USER_DOMAIN_NAME={{ lookup('env', 'OS_USER_DOMAIN_NAME') }}
+          - OS_PASSWORD={{ lookup('env', 'OS_PASSWORD') }}
+          - OS_REGION_NAME={{ lookup('env', 'OS_REGION_NAME') | default('') }} # Handle optional region
+          - FS_OPENSTACK_SWIFT_CONTAINER_NAME={{ lookup('env', 'FS_OPENSTACK_SWIFT_CONTAINER_NAME') }}
+        # state: present # Use state: present for long-running services
+        # run_once: yes # This runs the task once on the first host in the group, not the container once
+        # Instead of state: present, use run_command which is more suitable for batch jobs
+      # community.docker.docker_compose: state: absent + state: present is not idiomatic for jobs
+
+      # Alternative using shell module with docker compose run
+      # This is often simpler for one-off jobs
+      ansible.builtin.shell: |
+        cd "{{ project_remote_path }}" && \
+        docker compose run --rm \
+          -e OS_AUTH_URL={{ lookup('env', 'OS_AUTH_URL') }} \
+          -e OS_PROJECT_NAME={{ lookup('env', 'OS_PROJECT_NAME') }} \
+          -e OS_PROJECT_DOMAIN_NAME={{ lookup('env', 'OS_PROJECT_DOMAIN_NAME') }} \
+          -e OS_USERNAME={{ lookup('env', 'OS_USERNAME') }} \
+          -e OS_USER_DOMAIN_NAME={{ lookup('env', 'OS_USER_DOMAIN_NAME') }} \
+          -e OS_PASSWORD={{ lookup('env', 'OS_PASSWORD') }} \
+          -e OS_REGION_NAME={{ lookup('env', 'OS_REGION_NAME') | default('') }} \
+          -e FS_OPENSTACK_SWIFT_CONTAINER_NAME={{ lookup('env', 'FS_OPENSTACK_SWIFT_CONTAINER_NAME') }} \
+          etl-job python drive_to_swift_etl.py {{ lookup('env', 'GOOGLE_DRIVE_FOLDER_ID') }} --swift-container {{ lookup('env', 'FS_OPENSTACK_SWIFT_CONTAINER_NAME') }} --retry 5 --clean --quiet
+      args:
+        chdir: "{{ project_remote_path }}" # Ensure shell runs in the project dir
+        executable: /bin/bash # Use bash to ensure pipes/redirection work
+      # The shell module waits for the command (docker compose run) to complete
+      # The exit code of the shell command is the exit code of the container's entrypoint
+      register: etl_run_result
+      # ignore_errors: yes # Decide if you want to ignore errors or fail the playbook
+
+    - name: Report ETL job output
+      ansible.builtin.debug:
+        msg: "ETL job output: {{ etl_run_result.stdout }}"
+
+    - name: Check ETL job exit status
+      ansible.builtin.fail:
+        msg: "ETL job failed with exit code {{ etl_run_result.rc }}. Stderr: {{ etl_run_result.stderr }}"
+      when: etl_run_result.rc != 0 # Fail the task if the shell command (container) exited with non-zero
