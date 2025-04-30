@@ -6,7 +6,7 @@ description = "Containerized training job for the AgriYield prediction model"
 authors = ["Your Name <you@example.com>"]
 license = "MIT" # Or your preferred license
 readme = "README.md" # Optional
-package-mode = false # Treat as a script project, not a library package
+packages = [{include = "model_training"}] # Include the model_training package
 
 [tool.poetry.dependencies]
 python = "^3.9" # Match your Dockerfile base image

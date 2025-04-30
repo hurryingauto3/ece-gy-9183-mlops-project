@@ -5,10 +5,10 @@ description = "Downloads Google Drive folder and uploads to OpenStack Swift"
 authors = ["Your Name <you@example.com>"]
 license = "MIT" # Or your preferred license
 readme = "README.md" # Optional
-package-mode = false
+packages = [{include = "etl_pipeline"}] # Include the etl_pipeline package
 
 [tool.poetry.dependencies]
-python = "^3.9" # Or your target Python version
+python = "^3.10" # Or your target Python version
 gdown = "^4.7.1" # Use appropriate versions
 openstacksdk = "^0.60.0" # Use appropriate versions
 
