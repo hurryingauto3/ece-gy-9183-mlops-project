@@ -39,8 +39,8 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY . /app/model_serving
 
 # Set environment variables
-ENV MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}
-ENV FEATURE_SERVICE_URL=${FEATURE_SERVICE_URL}
+ENV MLFLOW_TRACKING_URI=""
+ENV FEATURE_SERVICE_URL=""
 # Ensure this is passed during docker run
 ENV PYTHONPATH=/app
 # Add environment variable for number of workers (default to 2 if not set)
