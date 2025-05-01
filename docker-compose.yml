@@ -1,12 +1,18 @@
 services:
 
   # --- New MLflow Service ---
+    # --- New MLflow Service ---
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.0.1
     container_name: mlflow-container
-    platform: linux/amd64
-    command: tail -f /dev/null
+    platform: linux/amd64 # KEEP this if your host is AMD64 (uname -m is x86_64)
+                          # CHANGE to linux/arm64/v8 if your host is ARM64 (uname -m is aarch64)
     ports:
+      # IMPORTANT: Your .env has MLFLOW_TRACKING_URI=http://mlflow:5000
+      # Your compose maps 5001:5001.
+      # To be consistent and use the compose port, change MLFLOW_TRACKING_URI in .env to 5001
+      # Or change this ports mapping to "5000:5000" and the --port below to 5000.
+      # Let's assume you change .env to 5001 for now.
       - "5001:5001"
     environment:
       # Pass standard OpenStack OS_* variables required by openstack.connect() / MLflow Swift
@@ -16,7 +22,7 @@ services:
       - OS_APPLICATION_CREDENTIAL_ID=${OS_APPLICATION_CREDENTIAL_ID} # From .env
       - OS_APPLICATION_CREDENTIAL_SECRET=${OS_APPLICATION_CREDENTIAL_SECRET} # From .env
       # Include Project ID and Region Name, as they are still relevant
-      # - OS_PROJECT_ID=${OS_PROJECT_ID} # From .env
+      # - OS_PROJECT_ID=${OS_PROJECT_ID} # From .env - uncomment if needed by SDK/Swift backend
       - OS_REGION_NAME=${OS_REGION_NAME} # From .env (Optional)
 
       # MLflow Swift specific settings (mostly stay the same)
@@ -26,14 +32,28 @@ services:
 
       # Backend store (metadata) - stays the same
       - MLFLOW_BACKEND_STORE_URI=sqlite:///mlflow/backend/mlflow.db
-      # Point artifacts to Swift - stays the same
-      - MLFLOW_ARTIFACT_LOCATION=swift://${FS_OPENSTACK_SWIFT_CONTAINER_NAME}/mlflow-artifacts
+      # Point artifacts to Swift - stays the same (used by command line)
+      - MLFLOW_ARTIFACT_LOCATION=${FS_OPENSTACK_SWIFT_CONTAINER_NAME}/mlflow-artifacts # Keep just the path part here
 
     volumes:
+      # The backend store and artifact root locations reference these mounted volumes
       - mlflow_tracking_data:/mlflow/backend
-      - mlflow_artifact_data:/mlflow/artifacts
+      - mlflow_artifact_data:/mlflow/artifacts # This volume is less relevant for Swift artifacts, can be removed if not needed for local logging
 
     restart: unless-stopped
+
+    # ADD THIS COMMAND BLOCK
+    command:
+      - mlflow
+      - server
+      - --backend-store-uri # Flag for the backend store
+      - sqlite:///mlflow/backend/mlflow.db # Value pointing to the sqlite file in the volume
+      - --default-artifact-root # CORRECT FLAG for artifact root in this MLflow version
+      - swift://${FS_OPENSTACK_SWIFT_CONTAINER_NAME}/mlflow-artifacts # Value pointing to the Swift location using the env var
+      - --host # Flag for the host to listen on
+      - 0.0.0.0 # Listen on all interfaces
+      - --port # Flag for the port to listen on
+      - "5001" # Use port 5001 to match the ports mapping in compose
 
   # --- ETL Job Service ---
   etl:
