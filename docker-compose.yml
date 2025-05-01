@@ -4,6 +4,7 @@ services:
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.0.1
     container_name: mlflow-container
+    platform: linux/arm64/v8 
     ports:
       - "5001:5001"
     environment:
@@ -43,8 +44,7 @@ services:
       - run
       - python # Or /usr/local/bin/python3 depending on your base image/install
       - /app/drive_to_swift_etl.py # Path to your script inside the container
-      - 
-      ${GOOGLE_DRIVE_FOLDER_ID} # Positional argument folder_id
+      - ${GOOGLE_DRIVE_FOLDER_ID} # Positional argument folder_id
       - --swift-container # Named argument flag
       - ${FS_OPENSTACK_SWIFT_CONTAINER_NAME} # Named argument value
       - --clean # Optional: Add --clean flag if you want it to clean up locally
