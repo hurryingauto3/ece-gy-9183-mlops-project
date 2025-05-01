@@ -17,7 +17,7 @@
         cd "{{ project_remote_path }}" && \
         docker compose run --rm \
           -e OS_AUTH_URL={{ lookup('env', 'OS_AUTH_URL') }} \
-          -e OS_AUTH_TYPE=application_credential \
+          -e OS_AUTH_TYPE={{ lookup('env', 'OS_AUTH_TYPE') }} \
           -e OS_APPLICATION_CREDENTIAL_ID={{ lookup('env', 'OS_APPLICATION_CREDENTIAL_ID') }} \
           -e OS_APPLICATION_CREDENTIAL_SECRET={{ lookup('env', 'OS_APPLICATION_CREDENTIAL_SECRET') }} \
           -e OS_PROJECT_ID={{ lookup('env', 'OS_PROJECT_ID') }} \

@@ -73,7 +73,7 @@ def download_folder(folder_id, output_dir, quiet, use_cookies, retries, logger):
                 output=output_dir,
                 quiet=quiet,
                 use_cookies=use_cookies,
-                timeout=900 # 15 minutes timeout for gdown operations
+                # timeout=900 # <--- REMOVE OR COMMENT OUT THIS LINE
             )
             duration = timedelta(seconds=int(time.monotonic() - start))
             logger.info(f"Download succeeded in {duration}")
@@ -101,7 +101,6 @@ def download_folder(folder_id, output_dir, quiet, use_cookies, retries, logger):
 
     # If loop finishes without returning, all attempts failed
     raise last_exception # Re-raise the last exception
-
 # --- Upload Function (Uses OS_* env vars, same logic) ---
 
 def upload_to_swift(local_directory, swift_container, logger):

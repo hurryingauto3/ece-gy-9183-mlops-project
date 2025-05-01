@@ -5,16 +5,16 @@ services:
     image: ghcr.io/mlflow/mlflow:v2.0.1
     container_name: mlflow-container
     ports:
-      - "5000:5000"
+      - "5001:5001"
     environment:
       # Pass standard OpenStack OS_* variables required by openstack.connect() / MLflow Swift
       # using Application Credentials
       - OS_AUTH_URL=${OS_AUTH_URL} # From .env
-      - OS_AUTH_TYPE=application_credential # Hardcoded type
+      - OS_AUTH_TYPE=${OS_AUTH_TYPE}
       - OS_APPLICATION_CREDENTIAL_ID=${OS_APPLICATION_CREDENTIAL_ID} # From .env
       - OS_APPLICATION_CREDENTIAL_SECRET=${OS_APPLICATION_CREDENTIAL_SECRET} # From .env
       # Include Project ID and Region Name, as they are still relevant
-      - OS_PROJECT_ID=${OS_PROJECT_ID} # From .env
+      # - OS_PROJECT_ID=${OS_PROJECT_ID} # From .env
       - OS_REGION_NAME=${OS_REGION_NAME} # From .env (Optional)
 
       # MLflow Swift specific settings (mostly stay the same)
@@ -34,25 +34,34 @@ services:
     restart: unless-stopped
 
   # --- ETL Job Service ---
-  etl-job:
-    build:
-      context: ./etl_pipeline
-      dockerfile: Dockerfile
-    container_name: etl
-    restart: "no"
+  etl:
+    build: ./etl_pipeline
+    container_name: etl-container
+    # Add this command section:
+    command:
+      - poetry
+      - run
+      - python # Or /usr/local/bin/python3 depending on your base image/install
+      - /app/drive_to_swift_etl.py # Path to your script inside the container
+      - 
+      ${GOOGLE_DRIVE_FOLDER_ID} # Positional argument folder_id
+      - --swift-container # Named argument flag
+      - ${FS_OPENSTACK_SWIFT_CONTAINER_NAME} # Named argument value
+      - --clean # Optional: Add --clean flag if you want it to clean up locally
+
     environment:
-      # Pass standard OpenStack OS_* variables required by openstack.connect()
-      # using Application Credentials
+      # Explicitly pass OpenStack credentials to the container
+      # These are needed by the openstack SDK within the script
       - OS_AUTH_URL=${OS_AUTH_URL}
-      - OS_AUTH_TYPE=application_credential
+      - OS_AUTH_TYPE=${OS_AUTH_TYPE}
       - OS_APPLICATION_CREDENTIAL_ID=${OS_APPLICATION_CREDENTIAL_ID}
       - OS_APPLICATION_CREDENTIAL_SECRET=${OS_APPLICATION_CREDENTIAL_SECRET}
-      # Include Project ID and Region Name
-      - OS_PROJECT_ID=${OS_PROJECT_ID}
-      - OS_REGION_NAME=${OS_REGION_NAME} # Optional
-
-      # Your script specific variable (Swift container name)
+      - OS_REGION_NAME=${OS_REGION_NAME}
+      # Pass the container name as env var as well, useful for debugging
+      # although the script reads it from command line via compose args
       - FS_OPENSTACK_SWIFT_CONTAINER_NAME=${FS_OPENSTACK_SWIFT_CONTAINER_NAME}
+      # Pass the folder ID as env var as well, useful for debugging
+      - GOOGLE_DRIVE_FOLDER_ID=${GOOGLE_DRIVE_FOLDER_ID}
 
 
   # --- Model Training Job Service ---
@@ -60,10 +69,11 @@ services:
     build:
       context: ./model_training
       dockerfile: Dockerfile
+    container_name: model-training-container
     restart: "no"
     environment:
       # MLflow config
-      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_TRACKING_URI=http://mlflow:5001
       - MLFLOW_MODEL_NAME=${MLFLOW_MODEL_NAME}
       - MLFLOW_MODEL_STAGE=${MLFLOW_MODEL_STAGE}
       - MLFLOW_EXPERIMENT_NAME=${MLFLOW_EXPERIMENT_NAME}
@@ -71,11 +81,11 @@ services:
       # Pass standard OpenStack OS_* variables required by openstack.connect() (for data loading)
       # using Application Credentials
       - OS_AUTH_URL=${OS_AUTH_URL}
-      - OS_AUTH_TYPE=application_credential
+      - OS_AUTH_TYPE=${OS_AUTH_TYPE}
       - OS_APPLICATION_CREDENTIAL_ID=${OS_APPLICATION_CREDENTIAL_ID}
       - OS_APPLICATION_CREDENTIAL_SECRET=${OS_APPLICATION_CREDENTIAL_SECRET}
       # Include Project ID and Region Name
-      - OS_PROJECT_ID=${OS_PROJECT_ID}
+      # - OS_PROJECT_ID=${OS_PROJECT_ID}
       - OS_REGION_NAME=${OS_REGION_NAME} # Optional
 
       # Your script specific variable (Swift container name for data)
@@ -112,11 +122,11 @@ services:
       # Pass standard OpenStack OS_* variables required by openstack.connect()
       # using Application Credentials
       - OS_AUTH_URL=${OS_AUTH_URL}
-      - OS_AUTH_TYPE=application_credential
+      - OS_AUTH_TYPE=${OS_AUTH_TYPE}
       - OS_APPLICATION_CREDENTIAL_ID=${OS_APPLICATION_CREDENTIAL_ID}
       - OS_APPLICATION_CREDENTIAL_SECRET=${OS_APPLICATION_CREDENTIAL_SECRET}
       # Include Project ID and Region Name
-      - OS_PROJECT_ID=${OS_PROJECT_ID}
+      # - OS_PROJECT_ID=${OS_PROJECT_ID}
       - OS_REGION_NAME=${OS_REGION_NAME} # Optional
 
       # Your script specific variable (Swift container name)
@@ -136,7 +146,7 @@ services:
       - "8000:8000"
     environment:
       - FEATURE_SERVICE_URL=http://feature-service:8001
-      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_TRACKING_URI=http://mlflow:5001
       - MLFLOW_MODEL_NAME=${MLFLOW_MODEL_NAME}
       - MLFLOW_MODEL_STAGE=${MLFLOW_MODEL_STAGE}
       # API Settings
