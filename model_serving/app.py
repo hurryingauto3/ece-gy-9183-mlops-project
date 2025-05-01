@@ -563,57 +563,82 @@ async def health_check(
     return {"status": "ok"}
 
 
-@app.get(
-    "/health",
-    response_model=HealthResponse,  # Explicit response model
-    tags=["Service Info"],
-    summary="Perform a health check",
-    description="Checks if the service is running and essential dependencies (model, feature service) are available.",
-    response_description="Service status.",
-)
-async def health_check(model=Depends(get_model_and_mapping())):
-    if settings and settings.feature_service.url:
+async def health_check(
+    model_tuple=Depends(get_model_and_mapping),
+):  # <-- CORRECTED LINE
+    # The dependency 'get_model_and_mapping' ensures the model is loaded.
+    # 'model_tuple' will contain (loaded_model_instance, loaded_fips_mapping),
+    # but we don't strictly need to use 'model_tuple' within the health check itself,
+    # just the fact that Depends succeeded means the model is available.
+
+    # Use the settings loaded at startup
+    if settings and settings.feature_service and settings.feature_service.url:
         feature_service_ok = False
-        base_url = "invalid_url_initially"
+        # Use the client initialized globally
+        health_url = str(settings.feature_service.url).rstrip("/")  # Base URL of FS
+
         try:
-            base_url = str(settings.feature_service.url).rstrip("/") + "/"
+            # Ping the feature service. Using HEAD on the base URL is one way,
+            # or using a specific health endpoint like /health if available.
+            # Let's use HEAD on the base URL as in the second definition, but handle its response status.
             start_time = time.time()
-            response = await async_client.head(base_url, timeout=5.0)
+            # Using HEAD is faster than GET if you just need status code
+            response = await async_client.head(
+                health_url, timeout=settings.feature_service.timeout_seconds
+            )
             elapsed_time = time.time() - start_time
-            if response.status_code < 500:
+
+            # Log feature service latency
+            FEATURE_SERVICE_LATENCY.observe(elapsed_time)
+
+            # Check if status code is in the success range (2xx)
+            if 200 <= response.status_code < 300:
                 feature_service_ok = True
-                if response.status_code >= 400:
-                    logger.warning(
-                        "Health check: Feature service reachable but returned client error status",
-                        status_code=response.status_code,
-                        url=base_url,
-                    )
-            else:
-                logger.error(
-                    "Health check failed: Feature service returned server error status",
+                logger.debug(
+                    "Health check: Feature service reachable and healthy status",
+                    url=health_url,
                     status_code=response.status_code,
-                    url=base_url,
                 )
+            elif response.status_code >= 400:
+                logger.warning(
+                    "Health check: Feature service reachable but returned error status",
+                    status_code=response.status_code,
+                    url=health_url,
+                    response_body=response.text,  # Log body for error statuses
+                )
+                # Treat client/server errors from FS as unhealthy
+            else:
+                logger.warning(
+                    "Health check: Feature service reachable but returned unexpected status",
+                    status_code=response.status_code,
+                    url=health_url,
+                )
+
         except httpx.RequestError as e:
+            # Log latency even on connection errors? Depends on metric definition.
+            # FEATURE_SERVICE_LATENCY.observe(time.time() - start_time) # Consider if histogram should include failed attempts
             logger.error(
                 "Health check failed: Could not connect to Feature Service",
                 error=str(e),
-                url=base_url,
+                url=health_url,
             )
         except Exception as e:
             logger.exception(
                 "Health check failed: Unexpected error during Feature Service check"
             )
+
         if not feature_service_ok:
+            # Raise 503 if feature service check failed
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Dependency failed: Cannot reach Feature Service",
+                detail="Dependency failed: Cannot reach Feature Service or it's unhealthy",
             )
     else:
         logger.warning(
-            "Health check: Feature Service URL not configured, skipping connectivity check."
+            "Health check: Feature Service URL is None or not configured, skipping connectivity check."
         )
 
+    # If we reached here, the model loaded successfully (due to Depends) AND the Feature Service is reachable (if configured)
     logger.debug("Health check successful")
     return {"status": "ok"}
 
