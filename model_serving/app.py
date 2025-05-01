@@ -571,7 +571,7 @@ async def health_check(
     description="Checks if the service is running and essential dependencies (model, feature service) are available.",
     response_description="Service status.",
 )
-async def health_check(model=Depends(get_model)):  # Inject model dependency
+async def health_check(model=Depends(get_model_and_mapping())):
     if settings and settings.feature_service.url:
         feature_service_ok = False
         base_url = "invalid_url_initially"
