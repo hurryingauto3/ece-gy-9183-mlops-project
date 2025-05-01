@@ -4,7 +4,7 @@ services:
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.0.1
     container_name: mlflow-container
-    platform: linux/arm64/v8 
+    platform: linux/amd64
     ports:
       - "5001:5001"
     environment:
