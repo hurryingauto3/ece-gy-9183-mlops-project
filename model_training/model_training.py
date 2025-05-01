@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import tqdm # For progress bars
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 import random # Needed for random selection of years
+import mlflow.pytorch
 
 
 # %% [markdown]
@@ -403,6 +404,26 @@ class CropYieldDataset(Dataset):
     def get_sample_indices_by_year(self):
         """Returns a dictionary mapping year (str) to a list of sample indices for that year."""
         return self._samples_by_year_indices
+
+# %%
+def save_model_to_mlflow(model, input_example, model_name="AgriYieldPredictor"):
+    """
+    Logs the trained model to MLflow for serving.
+
+    Args:
+        model (torch.nn.Module): The trained PyTorch model.
+        input_example (tuple): A sample input for the model (e.g., weather_tensor, fips_tensor).
+        model_name (str): Name of the model in the MLflow Model Registry.
+    """
+    # Log the model to MLflow
+    mlflow.pytorch.log_model(
+        pytorch_model=model,
+        artifact_path="pytorch_model",  # Path within the MLflow run
+        registered_model_name=model_name,  # Register the model in the MLflow Model Registry
+        input_example=input_example  # Provide an example input for inference
+    )
+    print(f"Model logged to MLflow under the name '{model_name}'.")
+
 
 # %% [markdown]
 # ## Collate Function
@@ -862,7 +883,11 @@ if train_loader is not None and val_loader is not None:
 
     # Train the model using only the train and validation loaders (from pre-holdout years)
     trained_model = train_model(model, train_loader, val_loader, num_epochs=20) # Revert to 20 epochs
-
+    
+    sample_weather, _, sample_fips = next(iter(train_loader))
+    input_example = (sample_weather[:1], sample_fips[:1])  # Get a single example for MLflow logging
+    save_model_to_mlflow(trained_model, input_example)
+    
     # Evaluate the trained model on the validation set (pre-holdout years)
     evaluate_model(trained_model, val_loader)
 
