@@ -5,6 +5,7 @@ services:
     image: ghcr.io/mlflow/mlflow:v2.0.1
     container_name: mlflow-container
     platform: linux/amd64
+    command: tail -f /dev/null
     ports:
       - "5001:5001"
     environment:
