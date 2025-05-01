@@ -11,6 +11,7 @@ packages = [{include = "etl_pipeline"}] # Include the etl_pipeline package
 python = "^3.10" # Or your target Python version
 gdown = "^4.7.1" # Use appropriate versions
 openstacksdk = "^0.60.0" # Use appropriate versions
+keystoneauth1 = "^5.10.0" 
 
 [tool.poetry.group.dev.dependencies]
 # Add dev dependencies here if needed (e.g., pytest, flake8)
