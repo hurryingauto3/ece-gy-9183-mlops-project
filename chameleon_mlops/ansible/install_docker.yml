@@ -1,44 +1,54 @@
 - hosts: all
   become: yes
-  vars:
-    docker_apt_repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable"
   tasks:
-    - name: Install base packages for apt over HTTPS
-      apt: 
+    - name: Install base packages
+      apt:
         name: ['apt-transport-https', 'ca-certificates', 'curl', 'gnupg', 'lsb-release']
         state: present
-    - name: Add Docker GPG apt key
+
+    - name: Add Docker GPG key
       apt_key:
         url: https://download.docker.com/linux/ubuntu/gpg
         state: present
-    - name: Add Docker apt repository
+
+    - name: Add Docker repository
       apt_repository:
-        repo: "{{ docker_apt_repo }}"
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
         state: present
-    - name: Install Docker CE and Compose plugin
-      apt: 
+
+    - name: Install Docker engine & compose plugin
+      apt:
         name: ['docker-ce', 'docker-ce-cli', 'containerd.io', 'docker-compose-plugin']
         state: latest
-    - name: Ensure Docker service is started
-      service:
+
+    - name: Enable and start Docker
+      systemd:
         name: docker
-        state: started
         enabled: yes
-    - name: Add Ubuntu user to docker group
+        state: started
+
+    - name: Add {{ ansible_user }} to docker group
       user:
-        name: ubuntu
+        name: "{{ ansible_user }}"
         groups: docker
         append: yes
 
-- hosts: gpu
-  become: yes
-  tasks:
-    - name: Install NVIDIA Docker runtime (for GPU support in containers)
-      shell: |
-        distribution=$(. /etc/os-release; echo $ID$VERSION_ID) && \
-        curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | apt-key add - && \
-        curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | tee /etc/apt/sources.list.d/nvidia-docker.list && \
-        apt-get update && apt-get install -y nvidia-docker2 && systemctl restart docker
-      args:
-        executable: /bin/bash
-      changed_when: false
+    - name: Install NVIDIA Container Toolkit (GPU node only)
+      block:
+        - name: Add NVIDIA Docker GPG key
+          apt_key:
+            url: https://nvidia.github.io/nvidia-docker/gpgkey
+            state: present
+        - name: Add NVIDIA Docker repo
+          apt_repository:
+            repo: "deb https://nvidia.github.io/libnvidia-container/ubuntu{{ ansible_distribution_release }}/$(ARCH) /"
+            state: present
+        - name: Install nvidia-docker2
+          apt:
+            name: nvidia-docker2
+            state: present
+        - name: Restart Docker
+          systemd:
+            name: docker
+            state: restarted
+      when: inventory_hostname == 'gpu-node'

@@ -1,0 +1,21 @@
+# Install ArgoCD onto the K3s cluster
+
+- name: Install ArgoCD onto K3s control plane
+  hosts: k8s_control_plane
+  become: yes
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  tasks:
+    - name: Create ArgoCD namespace
+      shell: kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+    - name: Apply ArgoCD manifests
+      shell: |
+        kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+    - name: Expose ArgoCD server as NodePort
+      shell: |
+        kubectl patch svc argocd-server -n argocd \
+          -p '{"spec": {"type": "NodePort","ports":[{"port":443,"targetPort":443,"nodePort":32443}]}}'
+    - name: Wait for ArgoCD server
+      shell: kubectl rollout status deploy/argocd-server -n argocd
+      retries: 10
+      delay: 6

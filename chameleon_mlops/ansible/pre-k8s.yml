@@ -1,0 +1,43 @@
+# Prepare machines for K3s (disable swap, install deps)
+
+- name: Prepare nodes for Kubernetes
+  hosts: k8s_control_plane:k8s_workers
+  become: yes
+  tasks:
+    - name: Disable swap (required by Kubernetes)
+      shell: |
+        swapoff -a && sed -i '/ swap / s/^/#/' /etc/fstab
+
+    - name: Install containerd prerequisites
+      apt:
+        name: ["apt-transport-https","ca-certificates","curl"]
+        state: present
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+    - name: Add Docker apt repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename }} stable"
+        state: present
+    - name: Install containerd
+      apt:
+        name: ["containerd.io"]
+        state: latest
+    - name: Configure containerd and restart
+      copy:
+        dest: /etc/containerd/config.toml
+        content: |
+          version = 2
+          root = "/var/lib/containerd"
+          [plugins."io.containerd.grpc.v1.cri".containerd]
+            snapshotter = "overlayfs"
+      notify:
+        - Restart containerd
+  handlers:
+    - name: Restart containerd
+      systemd:
+        name: containerd
+        state: restarted
+        enabled: yes

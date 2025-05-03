@@ -1,0 +1,16 @@
+# Deploy application via kubectl/kustomize
+
+- name: Deploy MLOps services into Kubernetes
+  hosts: k8s_control_plane
+  become: yes
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  tasks:
+    - name: Apply base manifests via Kustomize
+      shell: |
+        cd /home/ubuntu/mlops-project/k8s/base && \
+        kubectl apply -k .
+    - name: Apply production overlay
+      shell: |
+        cd /home/ubuntu/mlops-project/k8s/overlays/production && \
+        kubectl apply -k .
