@@ -1,18 +1,4 @@
-# output "services_vm_ip" {
-#   description = "Floating IP of the services VM"
-#   value       = openstack_networking_floatingip_v2.fip_services.address
-# }
-# output "gpu_vm_ip" {
-#   description = "Floating IP of the GPU VM"
-#   value       = openstack_networking_floatingip_v2.fip_gpu.address
-# }
-# output "internal_ips" {
-#   description = "Internal IPs of the instances"
-#   value = {
-#     services_node = "192.168.100.50"
-#     gpu_node      = "192.168.100.51"
-#   }
-# }
+# This playbook installs Docker and the NVIDIA container runtime on Ubuntu 24.04.
 
 output "services_node_ip" {
   value = openstack_networking_floatingip_v2.fip_services.address
