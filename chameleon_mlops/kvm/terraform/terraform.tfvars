@@ -1,0 +1,6 @@
+openstack_cloud = "your_openstack_cloud_value"
+ssh_key_name = "your_ssh_key_name_value"
+public_key_path = "your_public_key_path_value"
+gpu_reservation_id = "your_gpu_reservation_id_value"
+services_flavor = "your_services_flavor_value"
+image = "CC-Ubuntu24.04-CUDA"

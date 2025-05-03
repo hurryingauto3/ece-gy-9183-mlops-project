@@ -1,0 +1,247 @@
+- hosts: services
+  become: yes
+  vars:
+    # Define environment values and internal addresses for templates
+    gpu_internal_ip: "192.168.100.51"  # internal IP of the GPU node (from Terraform)
+    mlflow_internal_ip: "192.168.100.50"  # internal IP of the services node
+    project_dir: "/home/ubuntu"  # working directory on remote
+  tasks:
+    - name: Upload Prometheus configuration
+      copy:
+        dest: "{{ project_dir }}/prometheus.yml"
+        content: |
+          global:
+            scrape_interval: 15s
+          scrape_configs:
+            - job_name: 'node_exporter_services'
+              static_configs:
+                - targets: ['nodeexporter:9100']
+            - job_name: 'node_exporter_gpu'
+              static_configs:
+                - targets: ['{{ gpu_internal_ip }}:9100']
+              metrics_path: /metrics
+            - job_name: 'fastapi'
+              static_configs:
+                - targets: ['{{ gpu_internal_ip }}:8000']
+              metrics_path: /metrics
+      delegate_to: localhost
+      run_once: true
+
+    - name: Upload Grafana provisioning (Prometheus datasource)
+      copy:
+        dest: "{{ project_dir }}/grafana-datasource.yml"
+        content: |
+          apiVersion: 1
+          datasources:
+            - name: Prometheus
+              type: prometheus
+              access: proxy
+              url: http://prometheus:9090
+              isDefault: true
+      delegate_to: localhost
+      run_once: true
+
+    - name: Upload Docker Compose file for services node
+      template:
+        dest: "{{ project_dir }}/docker-compose-services.yml"
+        # The template content is inlined below for clarity:
+        content: |
+          version: '3.8'
+          services:
+            mlflow:
+              image: ghcr.io/mlflow/mlflow:v2.4.1
+              command: mlflow server \
+                        --backend-store-uri postgresql://mlflow:mlflow_pass@postgres:5432/mlflow_db \
+                        --default-artifact-root s3://mlflow
+              environment:
+                AWS_ACCESS_KEY_ID: "minio"              # MinIO access key
+                AWS_SECRET_ACCESS_KEY: "minio123"       # MinIO secret key
+                MLFLOW_S3_ENDPOINT_URL: "http://minio:9000"
+              ports:
+                - "5000:5000"
+              depends_on:
+                - postgres
+                - minio
+
+            postgres:
+              image: postgres:13
+              environment:
+                POSTGRES_DB: "mlflow_db"
+                POSTGRES_USER: "mlflow"
+                POSTGRES_PASSWORD: "mlflow_pass"
+              volumes:
+                - postgres_data:/var/lib/postgresql/data
+
+            minio:
+              image: bitnami/minio:latest
+              environment:
+                MINIO_ROOT_USER: "minio"
+                MINIO_ROOT_PASSWORD: "minio123"
+                MINIO_DEFAULT_BUCKETS: "mlflow"       # create 'mlflow' bucket at startup&#8203;:contentReference[oaicite:17]{index=17}
+              command: ["server", "/data", "--console-address", ":9001"]
+              ports:
+                - "9000:9000"
+                - "9001:9001"
+              volumes:
+                - minio_data:/data
+
+            prometheus:
+              image: prom/prometheus:latest
+              volumes:
+                - {{ project_dir }}/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+              command:
+                - "--config.file=/etc/prometheus/prometheus.yml"
+                - "--storage.tsdb.path=/prometheus"
+              ports:
+                - "9090:9090"
+              depends_on:
+                - nodeexporter  # ensure node exporter container is up
+
+            grafana:
+              image: grafana/grafana:latest
+              environment:
+                - GF_SECURITY_ADMIN_PASSWORD=admin  # (change after first login)
+              volumes:
+                - grafana_data:/var/lib/grafana
+                - {{ project_dir }}/grafana-datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml:ro
+              ports:
+                - "3000:3000"
+              depends_on:
+                - prometheus
+
+            nodeexporter:
+              image: quay.io/prometheus/node-exporter:latest
+              volumes:
+                - /proc:/host/proc:ro
+                - /sys:/host/sys:ro
+                - /:/rootfs:ro
+              command:
+                - '--path.rootfs=/rootfs'
+                - '--path.procfs=/host/proc'
+                - '--path.sysfs=/host/sys'
+              ports:
+                - "9100:9100"
+
+            loadgenerator:
+              image: <your_load_generator_image>
+              environment:
+                TARGET_URL: "http://{{ gpu_internal_ip }}:8000"  # URL of FastAPI service
+              # (Configure other env vars like rate, etc., as needed)
+              depends_on:
+                - mlflow   # (if your loadgen needs MLflow tracking, ensure MLflow is up)
+              # No ports exposed (assumes it just runs and logs or pushes metrics to Prometheus if configured)
+
+          networks:
+            default:
+              name: mlops-net  # Use a deterministic network name to potentially link across hosts in future (optional)
+          volumes:
+            postgres_data:
+            minio_data:
+            grafana_data:
+      vars:
+        gpu_internal_ip: "{{ gpu_internal_ip }}"
+      # The above inline template uses the internal IP for loadgenerator to target FastAPI.
+      # Replace <your_load_generator_image> with the actual image name/path for the load generator app.
+    
+    - name: Launch MLOps services stack (Docker Compose up)
+      shell: |
+        docker compose -f {{ project_dir }}/docker-compose-services.yml up -d
+      args:
+        chdir: "{{ project_dir }}"
+      environment:
+        # Ensure Docker uses env (though none needed here). Compose V2 runs under 'docker compose'.
+        COMPOSE_PROJECT_NAME: "mlops_services"  # name the project (containers will have this prefix)
+
+    - name: Wait for Prometheus and Grafana to start (basic health check)
+      shell: "curl -sf http://localhost:9090/-/ready && curl -sf http://localhost:3000/api/health"
+      register: healthcheck
+      retries: 5
+      delay: 10
+      ignore_errors: yes
+      until: healthcheck.rc == 0
+
+    # Ray cluster head start on services node
+    - name: Install Ray (pip) on services node
+      apt: 
+        name: python3-pip
+        state: present
+      # Ensures pip is there (Ubuntu 20.04 might have it already)
+    - name: Install Ray via pip
+      pip:
+        name: "ray[default]"
+        state: latest
+    - name: Start Ray head node
+      shell: |
+        ray stop || true  # stop any existing Ray, ignore errors
+        ray start --head --port=6379 --dashboard-port=8265 --dashboard-host=0.0.0.0 --node-ip-address={{ mlflow_internal_ip }} --ray-client-server-port=10001
+      environment:
+        PATH: "/usr/local/bin:/usr/bin:{{ ansible_env.PATH }}"
+      async: 30   # run asynchronously, as ray start will daemonize
+      poll: 0
+
+- hosts: gpu
+  become: yes
+  vars:
+    mlflow_tracking_uri: "http://{{ hostvars['services-node'].ansible_host }}:5000"
+    project_dir: "/home/ubuntu"
+  tasks:
+    - name: Upload Docker Compose for FastAPI on GPU node
+      template:
+        dest: "{{ project_dir }}/docker-compose-gpu.yml"
+        content: |
+          version: '3.8'
+          services:
+            fastapi:
+              image: <your_fastapi_image>
+              env_file: .env   # (if you have an env file for app settings)
+              environment:
+                MLFLOW_TRACKING_URI: "{{ mlflow_tracking_uri }}"
+                # ... (any other needed env, e.g., FEATURE_SERVICE_URL, etc.)
+              ports:
+                - "8000:8000"
+              deploy:
+                resources:
+                  reservations:
+                    devices:
+                      - capabilities: [gpu]    # This will try to use GPU, requires nvidia runtime
+            nodeexporter:
+              image: quay.io/prometheus/node-exporter:latest
+              volumes:
+                - /proc:/host/proc:ro
+                - /sys:/host/sys:ro
+                - /:/rootfs:ro
+              command:
+                - '--path.rootfs=/rootfs'
+                - '--path.procfs=/host/proc'
+                - '--path.sysfs=/host/sys'
+              ports:
+                - "9100:9100"
+      vars:
+        mlflow_tracking_uri: "{{ mlflow_tracking_uri }}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Launch FastAPI and node exporter (Docker Compose up)
+      shell: |
+        docker compose -f {{ project_dir }}/docker-compose-gpu.yml up -d
+      args:
+        chdir: "{{ project_dir }}"
+      environment:
+        COMPOSE_PROJECT_NAME: "mlops_gpu"
+
+    - name: Install Ray via pip on GPU node
+      apt:
+        name: python3-pip
+        state: present
+    - name: Install Ray on GPU node
+      pip:
+        name: "ray[default]"
+        state: latest
+    - name: Connect GPU node to Ray head
+      shell: |
+        ray stop || true
+        ray start --address={{ hostvars['services-node'].inventory_hostname }}:6379 --node-ip-address={{ ansible_default_ipv4.address }}
+      environment:
+        PATH: "/usr/local/bin:/usr/bin:{{ ansible_env.PATH }}"
+      async: 30
+      poll: 0
