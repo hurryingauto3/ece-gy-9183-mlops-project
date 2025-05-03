@@ -1,6 +1,16 @@
-openstack_cloud
-ssh_key_name
-public_key_path
-gpu_reservation_id
-services_flavor
-image
+cloud             = "chameleon"
+services_region   = "CHI@TACC"
+gpu_region        = "CHI@UC"
+ext_net_name      = "public-ext-net"
+services_image    = "CC-Ubuntu24.04"
+services_flavor   = "m1.medium"
+gpu_image         = "CC-Ubuntu24.04-CUDA"
+gpu_flavor        = "baremetal"
+keypair_name      = "mlops_proj_key"
+public_key_path   = "~/.ssh/mlops_proj_key.pub"
+network_name      = "mlops-net"
+network_cidr      = "10.0.0.0/24"
+security_group_name = "mlops-secgrp"
+enable_staging    = false
+# If staging: staging_image = "CC-Ubuntu20.04"
+#            staging_flavor = "m1.small"
