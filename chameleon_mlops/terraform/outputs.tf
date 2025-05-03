@@ -30,7 +30,7 @@ output "gpu_private_ip" {
 # Optionally, output an Ansible inventory snippet
 output "ansible_inventory" {
   description = "Suggested inventory snippet for Ansible"
-  value = <<EOL
+  value       = <<EOL
 [services]
 services-node ansible_host=${openstack_networking_floatingip_v2.fip_services.address} ansible_user=ubuntu
 
