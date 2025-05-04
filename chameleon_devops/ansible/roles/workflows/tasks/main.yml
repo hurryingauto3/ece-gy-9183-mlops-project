@@ -1,0 +1,76 @@
+---
+# 0) Only run on control‑plane
+- name: Assert we're on a k8s_control_plane host
+  assert:
+    that: "'k8s_control_plane' in group_names"
+
+# 1) Create the argo namespace
+- name: Ensure the Argo namespace exists
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: Namespace
+    name: argo
+    state: present
+  environment:
+    KUBECONFIG: "{{ ansible_env.HOME }}/.kube/config"
+
+# 2) Install Argo Workflows (CRDs + controller + server) from install.yaml
+- name: Install Argo Workflows CRDs & controller
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('url', 'https://github.com/argoproj/argo-workflows/releases/download/v3.6.3/install.yaml') }}"
+  environment:
+    KUBECONFIG: "{{ ansible_env.HOME }}/.kube/config"
+
+- name: Show what's in the argo namespace
+  ansible.builtin.shell: |
+    kubectl get all -n argo
+  register: argo_resources
+  environment:
+    KUBECONFIG: "{{ ansible_env.HOME }}/.kube/config"
+
+- name: Debug Argo namespace contents
+  ansible.builtin.debug:
+    var: argo_resources.stdout_lines
+
+# 3) Wait for workflow‑controller to come up
+- name: Wait for the Argo Workflow Controller to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: argo
+    name: argo-workflows-workflow-controller
+  register: wf_ctrl
+  until:
+    - wf_ctrl.resources | length > 0
+    - (wf_ctrl.resources[0].status.readyReplicas | default(0))
+      == (wf_ctrl.resources[0].status.replicas | default(1))
+  retries: 20
+  delay: 6
+  environment:
+    KUBECONFIG: "{{ ansible_env.HOME }}/.kube/config"
+
+# 4) Now apply your CronWorkflow & retraining Workflow
+- name: Apply drift ConfigMap
+  kubernetes.core.k8s:
+    definition: "{{ lookup('file', playbook_dir + '/../k8s/workflows/drift-configmap.yml') }}"
+  environment:
+    KUBECONFIG: "{{ ansible_env.HOME }}/.kube/config"
+
+- name: Deploy drift‑detection CronWorkflow
+  kubernetes.core.k8s:
+    definition: "{{ lookup('file', playbook_dir + '/../k8s/workflows/drift-detection-cronworkflow.yml') }}"
+  environment:
+    KUBECONFIG: "{{ ansible_env.HOME }}/.kube/config"
+
+- name: Deploy retraining Workflow
+  kubernetes.core.k8s:
+    definition: "{{ lookup('file', playbook_dir + '/../k8s/workflows/retraining-workflow.yml') }}"
+  environment:
+    KUBECONFIG: "{{ ansible_env.HOME }}/.kube/config"
+
+- name: Register MLops workflows in ArgoCD
+  kubernetes.core.k8s:
+    definition: "{{ lookup('template','argocd-app-mlops.yaml.j2') }}"
+  environment:
+    KUBECONFIG: "{{ ansible_env.HOME }}/.kube/config"

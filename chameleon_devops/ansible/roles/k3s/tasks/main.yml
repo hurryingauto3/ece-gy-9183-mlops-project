@@ -1,0 +1,20 @@
+---
+- name: Download K3s install script
+  get_url:
+    url: https://get.k3s.io
+    dest: /tmp/k3s_install.sh
+    mode: '0755'
+
+- name: Install K3s server
+  shell: |
+    INSTALL_K3S_EXEC="--write-kubeconfig-mode 644" \
+    sh /tmp/k3s_install.sh server
+  args:
+    creates: /etc/rancher/k3s/k3s.yaml
+
+- name: Wait for K3s to be ready
+  command: kubectl get nodes --kubeconfig=/etc/rancher/k3s/k3s.yaml
+  register: k3s_ready
+  until: k3s_ready.rc == 0
+  retries: 10
+  delay: 6

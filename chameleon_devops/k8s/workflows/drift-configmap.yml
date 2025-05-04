@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: drift-config
+  namespace: mlops
+data:
+  last_drift_detected: "false"

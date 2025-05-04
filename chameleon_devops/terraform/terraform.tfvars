@@ -27,4 +27,5 @@ enable_staging      = false
 # Assign your reservation UUID here:
 # gpu_reservation_id = "c790c6bc-e2b5-4267-87b9-f55296fd16a5"
 # gpu_reservation_id = "c320853a-01c2-430d-8068-885c91a15926"
-gpu_reservation_id = "47d0e0cd-883c-4639-a646-a47fde6e7c4a"
+# gpu_reservation_id = "47d0e0cd-883c-4639-a646-a47fde6e7c4a"
+gpu_reservation_id = "8c7169a8-0f36-4d4a-a1f3-eaddf7646112"

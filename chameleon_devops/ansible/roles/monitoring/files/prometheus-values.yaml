@@ -1,0 +1,42 @@
+# devops/k8s/monitoring/prometheus-values.yaml
+
+# Basic persistence settings for Prometheus and Grafana
+# Consult the kube-prometheus-stack chart documentation for all available options:
+# https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
+
+prometheus:
+  prometheusSpec:
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: default # Or your specific StorageClass
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi # Adjust storage size as needed
+
+grafana:
+  persistence:
+    enabled: true
+    type: pvc
+    storageClassName: default # Or your specific StorageClass
+    accessModes: ["ReadWriteOnce"]
+    size: 5Gi # Adjust storage size as needed
+
+  # Example: Set admin password (consider using secrets for production)
+  # adminPassword: "yoursecurepassword"
+
+  # Example: Configure loading dashboards from ConfigMaps
+  # dashboardsConfigMaps:
+  #   grafana-dashboards: ""
+
+alertmanager:
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: default # Or your specific StorageClass
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi # Adjust storage size as needed

@@ -24,15 +24,20 @@ output "gpu_private_ip" {
 # Optionally, output an Ansible inventory snippet
 output "ansible_inventory" {
   description = "Suggested inventory snippet for Ansible"
-  value       = <<EOL
-[services]
-services-node ansible_host=${openstack_networking_floatingip_v2.fip_services.address} ansible_user=ubuntu
+  # use a “left‑trim” heredoc so any indentation is removed
+  value = <<-EOF
+    [services_nodes]
+    services-node ansible_host=${openstack_networking_floatingip_v2.fip_services.address} ansible_user=cc
 
-[gpu]
-gpu-node ansible_host=${openstack_networking_floatingip_v2.fip_gpu.address} ansible_user=ubuntu
+    [gpu_nodes]
+    gpu-node ansible_host=${openstack_networking_floatingip_v2.fip_gpu.address} ansible_user=cc
 
-[all:vars]
-ansible_ssh_private_key_file=~/.ssh/mlops_proj_key
-ansible_python_interpreter=/usr/bin/python3
-EOL
+    [k8s_control_plane]
+    services-node ansible_host=${openstack_networking_floatingip_v2.fip_services.address} ansible_user=cc
+
+    [all:vars]
+    ansible_ssh_private_key_file=~/.ssh/${openstack_compute_keypair_v2.keypair.name}
+    ansible_python_interpreter=/usr/bin/python3
+  EOF
 }
+

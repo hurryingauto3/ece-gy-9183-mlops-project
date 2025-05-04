@@ -1,34 +1,3 @@
-# # devops/ansible/site.yml
-# - name: Prepare all nodes
-#   hosts: all
-#   roles:
-#     - common
-
-# - name: Bootstrap Kubernetes
-#   hosts: k8s_control_plane:k8s_workers
-#   roles:
-#     - k3s
-
-# - name: Install ArgoCD
-#   hosts: k8s_control_plane
-#   roles:
-#     - argocd
-
-# - name: Deploy monitoring stack
-#   hosts: k8s_control_plane
-#   roles:
-#     - monitoring
-
-# - name: Deploy core MLOps services
-#   hosts: k8s_control_plane
-#   roles:
-#     - mlops-services
-
-# - name: Install drift & retraining workflows
-#   hosts: k8s_control_plane
-#   roles:
-#     - workflows
-
 - hosts: all
   become: true
   vars:
@@ -44,3 +13,12 @@
   become: true
   roles:
     - gpu_setup
+    
+- hosts: k8s_control_plane
+  become: true
+  roles:
+    - k3s
+    - argocd       # installs ArgoCD (with Helm + Python client + NodePort)
+    - workflows    # drift‑detection, retraining, and ArgoCD App
+    - monitoring   # deploys Prometheus and Grafana
+    - argo_workflows # installs Argo Workflows via Helm
