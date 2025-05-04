@@ -1,0 +1,46 @@
+# # devops/ansible/site.yml
+# - name: Prepare all nodes
+#   hosts: all
+#   roles:
+#     - common
+
+# - name: Bootstrap Kubernetes
+#   hosts: k8s_control_plane:k8s_workers
+#   roles:
+#     - k3s
+
+# - name: Install ArgoCD
+#   hosts: k8s_control_plane
+#   roles:
+#     - argocd
+
+# - name: Deploy monitoring stack
+#   hosts: k8s_control_plane
+#   roles:
+#     - monitoring
+
+# - name: Deploy core MLOps services
+#   hosts: k8s_control_plane
+#   roles:
+#     - mlops-services
+
+# - name: Install drift & retraining workflows
+#   hosts: k8s_control_plane
+#   roles:
+#     - workflows
+
+- hosts: all
+  become: true
+  vars:
+    project_remote_path: "/home/{{ ansible_user }}/mlops-project"
+  roles:
+    - docker_install
+    - docker_compose
+    - copy_configs
+    - project  
+    - services
+
+- hosts: gpu_nodes
+  become: true
+  roles:
+    - gpu_setup

@@ -1,0 +1,9 @@
+---
+- name: Deploy Docker Compose stack
+  shell: >
+    docker compose up -d
+    {% if 'gpu_node' in group_names %}
+    --profile gpu
+    {% endif %}
+  args:
+    chdir: "{{ project_remote_path }}"
