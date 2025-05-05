@@ -1,0 +1,23 @@
+# k8s/base/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feature-service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: feature-service
+  template:
+    metadata:
+      labels:
+        app: feature-service
+    spec:
+      containers:
+        - name: feature-service
+          image: ghcr.io/hurryingauto3/feature-service:__TAG__
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: feature-service-config

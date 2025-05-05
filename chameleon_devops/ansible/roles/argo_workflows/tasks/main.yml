@@ -31,3 +31,10 @@
   delay: 10
   environment:
     KUBECONFIG: "{{ ansible_env.HOME }}/.kube/config"
+
+
+- name: Apply ApplicationSet for per‑env deployments
+  kubernetes.core.k8s:
+    definition: "{{ lookup('file', playbook_dir + '/../k8s/argocd/applicationset.yaml') }}"
+  environment:
+    KUBECONFIG: "{{ ansible_env.HOME }}/.kube/config"

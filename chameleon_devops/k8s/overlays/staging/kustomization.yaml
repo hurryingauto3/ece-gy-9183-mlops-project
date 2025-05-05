@@ -1,0 +1,9 @@
+# k8s/overlays/staging/kustomization.yaml
+namespace: staging
+bases:
+  - ../../base
+patchesStrategicMerge:
+  - patch-deployment.yaml
+images:
+  - name: ghcr.io/hurryingauto3/feature-service
+    newTag: __TAG__

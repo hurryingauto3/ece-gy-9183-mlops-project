@@ -1,0 +1,9 @@
+# k8s/base/kustomization.yaml
+resources:
+  - deployment.yaml
+  - service.yaml
+
+# allow __TAG__ substitution via vars
+images:
+  - name: ghcr.io/hurryingauto3/feature-service
+    newTag: __TAG__

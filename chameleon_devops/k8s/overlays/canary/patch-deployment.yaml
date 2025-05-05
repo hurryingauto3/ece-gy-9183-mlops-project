@@ -1,0 +1,12 @@
+# k8s/overlays/canary/patch-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feature-service
+spec:
+  replicas: 2                         # fewer replicas in canary
+  template:
+    spec:
+      containers:
+        - name: feature-service
+          image: ghcr.io/hurryingauto3/feature-service:__TAG__
