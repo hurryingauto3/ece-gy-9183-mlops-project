@@ -1,0 +1,46 @@
+# k8s/argocd/applicationset.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: feature-service-envs
+  namespace: argocd
+  annotations:
+    # watch this image and look for semver tags
+    argocd-image-updater.argoproj.io/image-list: |
+      feature-service=ghcr.io/hurryingauto3/feature-service
+    # only pick tags prefixed "staging-", "canary-", or "prod-"
+    argocd-image-updater.argoproj.io/tag-semver: "staging-,canary-,prod-"
+    # commit back to Git repo when bumping
+    argocd-image-updater.argoproj.io/write-back-method: git
+    argocd-image-updater.argoproj.io/git-repo-url: https://github.com/hurryingauto3/ece-gy-9183-mlops-project.git
+    argocd-image-updater.argoproj.io/git-commit-user: argo‑updater
+    argocd-image-updater.argoproj.io/git-commit-email: updater@argocd.local
+spec:
+  generators:
+    - list:
+        elements:
+          - name: staging
+            path: k8s/overlays/staging
+            destNamespace: staging
+          - name: canary
+            path: k8s/overlays/canary
+            destNamespace: canary
+          - name: production
+            path: k8s/overlays/production
+            destNamespace: production
+  template:
+    metadata:
+      name: feature-service-{{name}}
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/hurryingauto3/ece-gy-9183-mlops-project.git
+        targetRevision: main
+        path: "{{path}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{destNamespace}}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true

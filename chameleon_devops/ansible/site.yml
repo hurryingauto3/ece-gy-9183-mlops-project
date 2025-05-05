@@ -16,9 +16,12 @@
     
 - hosts: k8s_control_plane
   become: true
+  vars_files:
+    - group_vars/all/secrets.yml   # this file *is* checked in, but encrypted!
   roles:
     - k3s
     - argocd       # installs ArgoCD (with Helm + Python client + NodePort)
+    - argocd_image_updater # staged deployment
     - workflows    # drift‑detection, retraining, and ArgoCD App
     - monitoring   # deploys Prometheus and Grafana
     - argo_workflows # installs Argo Workflows via Helm
