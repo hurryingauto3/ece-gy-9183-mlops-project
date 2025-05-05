@@ -1,0 +1,35 @@
+---
+# ansible/roles/gpu_setup/tasks/main.yml
+# Installs NVIDIA Container Toolkit and configures Docker to use the nvidia runtime.
+
+- name: Add NVIDIA Container Toolkit GPG key
+  ansible.builtin.apt_key:
+    url: https://nvidia.github.io/libnvidia-container/gpgkey
+    keyring: /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+    state: present
+
+- name: Add NVIDIA Container Toolkit apt repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg]
+      https://nvidia.github.io/libnvidia-container/stable/deb/amd64
+      /
+    filename: nvidia-container-toolkit
+    state: present
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install NVIDIA Container Toolkit
+  ansible.builtin.apt:
+    name: nvidia-container-toolkit
+    state: latest
+
+- name: Configure Docker to use the NVIDIA runtime and restart service
+  ansible.builtin.shell: |
+    nvidia-ctk runtime configure --runtime=docker
+    systemctl restart docker
+  args:
+    executable: /bin/bash

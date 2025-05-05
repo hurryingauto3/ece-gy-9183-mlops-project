@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    networks:
+      - backend
+
+  minio:
+    image: bitnami/minio:latest
+    env_file: .env
+    command: server /data
+    volumes:
+      - ./data/minio:/data
+    ports:
+      - "9000:9000"
+    networks:
+      - backend
+    depends_on:
+      - postgres
+
+  mlflow:
+    image: mlfloworg/mlflow:2.4.1
+    env_file: .env
+    command: >
+      mlflow server
+        --backend-store-uri postgresql://${DB_USER}:${DB_PASS}@postgres/mlflow_db
+        --default-artifact-root s3://${MINIO_DEFAULT_BUCKETS}
+    environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_S3_ENDPOINT_URL: ${AWS_S3_ENDPOINT_URL}
+    ports:
+      - "5000:5000"
+    networks:
+      - backend
+    depends_on:
+      - postgres
+      - minio
+
+  fastapi:
+    image: ${FASTAPI_IMAGE}
+    env_file: .env
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    ports:
+      - "8000:8000"
+    networks:
+      - backend
+    depends_on:
+      - mlflow
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - backend
+    depends_on:
+      - node_exporter
+
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      - ./config/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./config/grafana_provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    networks:
+      - backend
+    depends_on:
+      - prometheus
+
+  node_exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    pid: "host"
+    ports:
+      - "9100:9100"
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+
+profiles:
+  gpu:
+    services:
+      mlflow:
+        deploy:
+          resources:
+            reservations:
+              devices:
+                - driver: nvidia
+                  count: 1
+                  capabilities: [gpu]

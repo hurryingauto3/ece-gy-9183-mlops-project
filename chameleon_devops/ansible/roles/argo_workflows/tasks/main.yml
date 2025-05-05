@@ -1,0 +1,33 @@
+# roles/argo_workflows/tasks/main.yml
+---
+- name: Add Argo Workflows Helm repo
+  kubernetes.core.helm_repository:
+    name: argo-wf
+    repo_url: https://argoproj.github.io/argo-helm
+
+- name: Install Argo Workflows via Helm
+  kubernetes.core.helm:
+    chart_ref: argo-wf/argo-workflows
+    release_name: argo-workflows
+    namespace: argo
+    create_namespace: false   # namespace already created by argocd role
+    values:
+      controller:
+        serviceAccount:
+          create: true
+
+- name: Wait for Argo Workflows Controller to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: argo
+    name: argo-workflows-workflow-controller
+  register: wf_ctrl
+  until:
+    - wf_ctrl.resources | length > 0
+    - (wf_ctrl.resources[0].status.readyReplicas | default(0))
+      == (wf_ctrl.resources[0].status.replicas | default(1))
+  retries: 20
+  delay: 10
+  environment:
+    KUBECONFIG: "{{ ansible_env.HOME }}/.kube/config"

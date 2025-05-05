@@ -1,0 +1,24 @@
+- hosts: all
+  become: true
+  vars:
+    project_remote_path: "/home/{{ ansible_user }}/mlops-project"
+  roles:
+    - docker_install
+    - docker_compose
+    - copy_configs
+    - project  
+    - services
+
+- hosts: gpu_nodes
+  become: true
+  roles:
+    - gpu_setup
+    
+- hosts: k8s_control_plane
+  become: true
+  roles:
+    - k3s
+    - argocd       # installs ArgoCD (with Helm + Python client + NodePort)
+    - workflows    # drift‑detection, retraining, and ArgoCD App
+    - monitoring   # deploys Prometheus and Grafana
+    - argo_workflows # installs Argo Workflows via Helm

@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: drift-detection
+  namespace: mlops
+spec:
+  schedule: "@daily"
+  concurrencyPolicy: "Allow"
+  workflowSpec:
+    entrypoint: detect-drift
+    templates:
+      - name: detect-drift
+        steps:
+          - - name: run-drift-check
+              template: drift-check
+
+      - name: drift-check
+        container:
+          image: python:3.9-slim
+          command: ["bash", "-c"]
+          args:
+            - |
+              pip install great_expectations &&
+              ge --v3-api checkpoint run my_drift_checkpoint &&
+              kubectl patch configmap drift-config \
+                -n mlops \
+                --type merge \
+                -p "{\"data\": {\"last_drift_detected\":\"$( [ $? -eq 0 ] && echo false || echo true )\" }}\""

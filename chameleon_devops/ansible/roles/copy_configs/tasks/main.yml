@@ -1,0 +1,42 @@
+---
+- name: Ensure config directory exists
+  file:
+    path: "{{ project_remote_path }}/config"
+    state: directory
+    mode: '0755'
+
+- name: Ensure Grafana provisioning dashboards directory exists
+  file:
+    path: "{{ project_remote_path }}/config/grafana_provisioning/dashboards"
+    state: directory
+    mode: '0755'
+
+- name: Ensure Grafana provisioning datasources directory exists
+  file:
+    path: "{{ project_remote_path }}/config/grafana_provisioning/datasources"
+    state: directory
+    mode: '0755'
+
+- name: Copy Prometheus config
+  copy:
+    src: prometheus.yml
+    dest: "{{ project_remote_path }}/config/prometheus.yml"
+    mode: '0644'
+
+- name: Copy Grafana main config
+  copy:
+    src: grafana.ini
+    dest: "{{ project_remote_path }}/config/grafana.ini"
+    mode: '0644'
+
+- name: Copy Grafana dashboards provisioning file
+  copy:
+    src: dashboards.yml
+    dest: "{{ project_remote_path }}/config/grafana_provisioning/dashboards/dashboards.yml"
+    mode: '0644'
+
+- name: Copy Grafana Prometheus datasource provisioning
+  copy:
+    src: prometheus-datasource.yml
+    dest: "{{ project_remote_path }}/config/grafana_provisioning/datasources/prometheus-datasource.yml"
+    mode: '0644'
