@@ -37,7 +37,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy application code from build context
 # COPY . /app/model_serving
-COPY ./app/
+COPY ./model_serving /app/model_serving
 
 # Set environment variables
 ENV MLFLOW_TRACKING_URI=""
