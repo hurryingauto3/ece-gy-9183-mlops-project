@@ -54,19 +54,14 @@ COPY models.py ./feature_serving/
 # If you have other helper files in feature_serving/, copy them too
 # COPY feature_serving/<other_file>.py ./feature_serving/
 
-# copy service code
-COPY feature_serving /app/feature_serving
-
 # Expose the port the application will listen on (default uvicorn port 8001)
-# EXPOSE 8001
-EXPOSE 8000
+EXPOSE 8001
 
 # Define the command to run when the container starts
 # Use the entrypoint script managed by Poetry to run the uvicorn module
 # This ensures uvicorn runs within the Poetry-managed virtual environment
 # Command: poetry run uvicorn feature_serving.main:app --host 0.0.0.0 --port 8001
-# CMD ["poetry", "run", "uvicorn", "feature_serving.main:app", "--host", "0.0.0.0", "--port", "8001"]
-CMD ["poetry", "run", "uvicorn", "feature_serving.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["poetry", "run", "uvicorn", "feature_serving.main:app", "--host", "0.0.0.0", "--port", "8001"]
 
 # Alternative CMD if you prefer not to use `poetry run`
 # This requires the poetry bin directory to be in the PATH
