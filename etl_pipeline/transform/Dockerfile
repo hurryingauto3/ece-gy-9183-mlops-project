@@ -45,7 +45,7 @@ RUN poetry install --no-interaction --no-ansi --no-root
 
 # Copy the ETL script
 # The build context is ./ETL, so paths are relative to that.
-COPY drive_to_swift_etl.py ./
+COPY transform.py ./
 
 # The command to run the script will be specified in docker-compose.yaml
 # when using `docker compose run`. No CMD is set here for this job image.
