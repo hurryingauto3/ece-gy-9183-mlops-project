@@ -36,7 +36,8 @@ COPY --from=builder /build/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy application code from build context
-COPY . /app/model_serving
+# COPY . /app/model_serving
+COPY ./app/
 
 # Set environment variables
 ENV MLFLOW_TRACKING_URI=""
@@ -56,5 +57,7 @@ EXPOSE 8000
 
 # Adjust the CMD to point to the app within the model_serving directory
 # Use the $UVICORN_WORKERS environment variable
-CMD ["uvicorn", "model_serving.app:app", "--host", "0.0.0.0", "--port", "8000"]
+# CMD ["uvicorn", "model_serving.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "model_serving.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
 #  "--workers", "${UVICORN_WORKERS}"]
