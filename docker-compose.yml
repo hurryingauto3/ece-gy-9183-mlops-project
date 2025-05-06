@@ -56,9 +56,11 @@ services:
       - "5001" # Use port 5001 to match the ports mapping in compose
 
   # --- ETL Job Service ---
-  etl_download:
+  etl-download:
     build: ./etl_pipeline/extract
     container_name: etl-extract-container
+    volumes:
+      - ./local_data:/app/data_lake 
     # Add this command section:
     command:
       - poetry
@@ -86,9 +88,12 @@ services:
       - GOOGLE_DRIVE_FOLDER_ID_HRRR=${GOOGLE_DRIVE_FOLDER_ID_HRRR}
       - GOOGLE_DRIVE_FOLDER_ID_USDA=${GOOGLE_DRIVE_FOLDER_ID_USDA}
 
-  etl_transform:
+  etl-transform:
     build: ./etl_pipeline/transform
     container_name: etl-transform-container
+    volumes:
+      - ./local_data:/app/data_lake  # Fetch data from local VM storage
+      - persistent_data:/mnt/project4/data
     # Add this command section:
     command:
       - poetry

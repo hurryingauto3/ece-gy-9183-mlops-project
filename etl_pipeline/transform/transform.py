@@ -12,10 +12,10 @@ console_handler = logging.StreamHandler()
 logger.addHandler(console_handler)
 
 # Block Storage Directory Path (Mounted block storage path)
-block_storage_dir = "/mnt/project4/data_lake"  # Adjust this to the correct mounted block storage path
+block_storage_dir = "/mnt/project4/data"  # Adjust this to the correct mounted block storage path
 
 # VM Temporary Directory for Local Downloads
-temp_download_dir = "/app/downloaded_temp"  # Same as extract.py's default
+temp_download_dir = "/app/data_lake"  # Same as extract.py's default
 
 # Ensure the temporary download directory exists
 Path(temp_download_dir).mkdir(parents=True, exist_ok=True)
