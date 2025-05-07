@@ -24,8 +24,8 @@ clouds:
     auth_type: "v3applicationcredential"
     auth:
       auth_url: https://chi.tacc.chameleoncloud.org:5000
-      application_credential_id: "a793ad2f6d6f4ae2b85929d7f215a59d"
-      application_credential_secret: "OJQdzF1knvdWJ4YQZw6ixyUbP4tvt_Zo9DJW5mKL5_ljp7zxIX_mXPklHaNnVANhXJRFH-R1pocHkbvFpnrp0g"
+      application_credential_id: "f5989572a68047feac8c3abeff67b483"
+      application_credential_secret: "0nimRVXbNiSpdNOXlB2D0NzUk0MwrVHoaxB67Pk2OH3rIlL62QIoDkfS2fi59De19vZJ7NnP-iI2NbQUgfVlpg"
     
   kvm:   
     region_name: "KVM@TACC"
