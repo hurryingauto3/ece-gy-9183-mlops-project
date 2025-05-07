@@ -32,11 +32,16 @@ resource "openstack_networking_secgroup_v2" "mlops_secgrp" {
   name        = var.security_group_name
   description = "Security group for MLOps VMs"
 }
+resource "openstack_networking_secgroup_v2" "mlops_secgrp_proj4" {
+  provider    = openstack.kvm
+  name        = "mlops-secgrp-proj4" # must be globally unique in your project
+  description = "Security group for MLOps VMs (proj4)"
+}
 
 # SSH
-resource "openstack_networking_secgroup_rule_v2" "ssh_ingress" {
+resource "openstack_networking_secgroup_rule_v2" "ssh_ingress_proj4" {
   provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp.id
+  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
   direction         = "ingress"
   protocol          = "tcp"
   port_range_min    = 22
@@ -46,9 +51,9 @@ resource "openstack_networking_secgroup_rule_v2" "ssh_ingress" {
 }
 
 # ICMP (ping)
-resource "openstack_networking_secgroup_rule_v2" "icmp_ingress" {
+resource "openstack_networking_secgroup_rule_v2" "icmp_ingress_proj4" {
   provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp.id
+  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
   direction         = "ingress"
   protocol          = "icmp"
   remote_ip_prefix  = "0.0.0.0/0"
@@ -56,21 +61,21 @@ resource "openstack_networking_secgroup_rule_v2" "icmp_ingress" {
 }
 
 # Intra‑group traffic (all TCP)
-resource "openstack_networking_secgroup_rule_v2" "internal" {
+resource "openstack_networking_secgroup_rule_v2" "internal_proj4" {
   provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp.id
+  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
   direction         = "ingress"
   protocol          = "tcp"
   port_range_min    = 1
   port_range_max    = 65535
-  remote_group_id   = openstack_networking_secgroup_v2.mlops_secgrp.id
+  remote_group_id   = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
   ethertype         = "IPv4"
 }
 
 # MLflow UI
-resource "openstack_networking_secgroup_rule_v2" "mlflow_ui_ingress" {
+resource "openstack_networking_secgroup_rule_v2" "mlflow_ui_ingress_proj4" {
   provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp.id
+  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
   direction         = "ingress"
   protocol          = "tcp"
   port_range_min    = 5000
@@ -80,9 +85,9 @@ resource "openstack_networking_secgroup_rule_v2" "mlflow_ui_ingress" {
 }
 
 # Grafana
-resource "openstack_networking_secgroup_rule_v2" "grafana_ingress" {
+resource "openstack_networking_secgroup_rule_v2" "grafana_ingress_proj4" {
   provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp.id
+  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
   direction         = "ingress"
   protocol          = "tcp"
   port_range_min    = 3000
@@ -92,9 +97,9 @@ resource "openstack_networking_secgroup_rule_v2" "grafana_ingress" {
 }
 
 # Prometheus
-resource "openstack_networking_secgroup_rule_v2" "prometheus_ingress" {
+resource "openstack_networking_secgroup_rule_v2" "prometheus_ingress_proj4" {
   provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp.id
+  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
   direction         = "ingress"
   protocol          = "tcp"
   port_range_min    = 9090
@@ -104,9 +109,9 @@ resource "openstack_networking_secgroup_rule_v2" "prometheus_ingress" {
 }
 
 # MinIO (9000 & 9001)
-resource "openstack_networking_secgroup_rule_v2" "minio_ingress" {
+resource "openstack_networking_secgroup_rule_v2" "minio_ingress_proj4" {
   provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp.id
+  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
   direction         = "ingress"
   protocol          = "tcp"
   port_range_min    = 9000
@@ -116,9 +121,9 @@ resource "openstack_networking_secgroup_rule_v2" "minio_ingress" {
 }
 
 # FastAPI
-resource "openstack_networking_secgroup_rule_v2" "fastapi_ingress" {
+resource "openstack_networking_secgroup_rule_v2" "fastapi_ingress_proj4" {
   provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp.id
+  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
   direction         = "ingress"
   protocol          = "tcp"
   port_range_min    = 8000
@@ -128,9 +133,9 @@ resource "openstack_networking_secgroup_rule_v2" "fastapi_ingress" {
 }
 
 # Ray Dashboard
-resource "openstack_networking_secgroup_rule_v2" "ray_dashboard_ingress" {
+resource "openstack_networking_secgroup_rule_v2" "ray_dashboard_ingress_proj4" {
   provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp.id
+  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
   direction         = "ingress"
   protocol          = "tcp"
   port_range_min    = 8265
@@ -140,9 +145,9 @@ resource "openstack_networking_secgroup_rule_v2" "ray_dashboard_ingress" {
 }
 
 # Ray Client Server
-resource "openstack_networking_secgroup_rule_v2" "ray_client_ingress" {
+resource "openstack_networking_secgroup_rule_v2" "ray_client_ingress_proj4" {
   provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp.id
+  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
   direction         = "ingress"
   protocol          = "tcp"
   port_range_min    = 10001
@@ -191,14 +196,13 @@ resource "openstack_networking_router_interface_v2" "router_intf_kvm" {
 # 5) Services VM on KVM@TACC
 # ──────────────────────────────────────────
 resource "openstack_compute_instance_v2" "services_node" {
-  provider = openstack.kvm
-  name     = "services-node-project4"
-  # Using image ID directly based on previous success for KVM
-  image_id    = "01770b20-dd09-4c78-b855-7327e714edb8"
+  provider    = openstack.kvm
+  name        = "services-node-project4"
+  image_name  = var.services_image
   flavor_name = var.services_flavor
   key_pair    = openstack_compute_keypair_v2.keypair.name
-  # --- FIX: Use ID instead of name for security group on KVM ---
-  security_groups = [openstack_networking_secgroup_v2.mlops_secgrp.id]
+  # security_groups = [openstack_networking_secgroup_v2.mlops_secgrp.name]
+  security_groups = [openstack_networking_secgroup_v2.mlops_secgrp_proj4.id]
 
   network {
     uuid = openstack_networking_network_v2.private_net_kvm.id
@@ -303,12 +307,14 @@ resource "openstack_compute_instance_v2" "gpu_node" {
 # 9) Optional staging VM on CHI@TACC
 # ──────────────────────────────────────────
 resource "openstack_compute_instance_v2" "staging_node" {
-  count       = var.enable_staging ? 1 : 0
-  provider    = openstack.chi
-  name        = "staging-node"
-  image_id    = "c4f7f819-25b1-4156-b51e-2c86d0e41687"
-  flavor_name = var.staging_flavor
-  key_pair    = openstack_compute_keypair_v2.keypair.name
+  count           = var.enable_staging ? 1 : 0
+  provider        = openstack.chi
+  name            = "staging-node"
+  image_name      = var.staging_image
+  flavor_name     = var.staging_flavor
+  key_pair        = openstack_compute_keypair_v2.keypair.name
+  security_groups = [openstack_networking_secgroup_v2.mlops_secgrp_proj4.name]
+
 
   network {
     uuid = openstack_networking_network_v2.private_net_chi.id
