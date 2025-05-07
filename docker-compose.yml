@@ -1,5 +1,17 @@
 services:
-
+  jupyter:
+    image: jupyter/base-notebook:latest
+    container_name: jupyter-container
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/home/jovyan/work
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5001
+    command: start-notebook.sh --NotebookApp.token=''
+    restart: unless-stopped
+    depends_on:
+      - mlflow
   # --- New MLflow Service ---
     # --- New MLflow Service ---
   mlflow:
