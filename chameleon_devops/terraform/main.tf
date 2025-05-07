@@ -191,12 +191,14 @@ resource "openstack_networking_router_interface_v2" "router_intf_kvm" {
 # 5) Services VM on KVM@TACC
 # ──────────────────────────────────────────
 resource "openstack_compute_instance_v2" "services_node" {
-  provider        = openstack.kvm
-  name            = "services-node-project4"
-  image_name      = var.services_image
-  flavor_name     = var.services_flavor
-  key_pair        = openstack_compute_keypair_v2.keypair.name
-  security_groups = [openstack_networking_secgroup_v2.mlops_secgrp.name]
+  provider = openstack.kvm
+  name     = "services-node-project4"
+  # Using image ID directly based on previous success for KVM
+  image_id    = "01770b20-dd09-4c78-b855-7327e714edb8"
+  flavor_name = var.services_flavor
+  key_pair    = openstack_compute_keypair_v2.keypair.name
+  # --- FIX: Use ID instead of name for security group on KVM ---
+  security_groups = [openstack_networking_secgroup_v2.mlops_secgrp.id]
 
   network {
     uuid = openstack_networking_network_v2.private_net_kvm.id
@@ -280,11 +282,11 @@ resource "openstack_networking_router_interface_v2" "router_intf_chi" {
 resource "openstack_compute_instance_v2" "gpu_node" {
   provider    = openstack.chi
   name        = "gpu-node-project4"
-  image_name  = var.gpu_image
+  image_id    = "89b991a7-7d01-4348-9cee-0c67f6f0ea90"
   flavor_name = var.gpu_flavor
   key_pair    = openstack_compute_keypair_v2.keypair.name
-  # security_groups = [data.openstack_networking_secgroup_v2.mlops_secgrp_chi.name]
-  # no security_groups declared → port_security_disabled on this network
+  # security_groups declared -> port_security_disabled on this network
+  # Note: No security group specified here, relying on network's port_security_enabled=false
 
   network {
     uuid = openstack_networking_network_v2.private_net_chi.id
@@ -301,13 +303,12 @@ resource "openstack_compute_instance_v2" "gpu_node" {
 # 9) Optional staging VM on CHI@TACC
 # ──────────────────────────────────────────
 resource "openstack_compute_instance_v2" "staging_node" {
-  count           = var.enable_staging ? 1 : 0
-  provider        = openstack.chi
-  name            = "staging-node"
-  image_name      = var.staging_image
-  flavor_name     = var.staging_flavor
-  key_pair        = openstack_compute_keypair_v2.keypair.name
-  security_groups = [openstack_networking_secgroup_v2.mlops_secgrp.name]
+  count       = var.enable_staging ? 1 : 0
+  provider    = openstack.chi
+  name        = "staging-node"
+  image_id    = "c4f7f819-25b1-4156-b51e-2c86d0e41687"
+  flavor_name = var.staging_flavor
+  key_pair    = openstack_compute_keypair_v2.keypair.name
 
   network {
     uuid = openstack_networking_network_v2.private_net_chi.id
