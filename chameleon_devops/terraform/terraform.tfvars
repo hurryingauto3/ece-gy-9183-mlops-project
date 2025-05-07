@@ -30,4 +30,5 @@ enable_staging      = false
 # gpu_reservation_id = "47d0e0cd-883c-4639-a646-a47fde6e7c4a"
 # gpu_reservation_id = "8c7169a8-0f36-4d4a-a1f3-eaddf7646112"
 # gpu_reservation_id = "15b16b92-95c9-4d4e-87b9-5e2eac70ee29"
-gpu_reservation_id = "4f48dfa8-946b-4b75-8c94-1297d6084e34"
+# gpu_reservation_id = "4f48dfa8-946b-4b75-8c94-1297d6084e34"
+gpu_reservation_id = "a3f5ea5c-8e7b-496a-a99f-edaf48524692"
