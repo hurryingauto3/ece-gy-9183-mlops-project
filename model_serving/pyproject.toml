@@ -25,6 +25,8 @@ prometheus-client = "^0.19.0" # Core client library for custom metrics
 # Add data_pipeline dependencies here if needed directly by model_serving
 # Example: If data_pipeline/fetch.py needs 'some-library', add it:
 # some-library = "^1.2.3"
+torch = "^2.7.0"
+torchvision = "^0.22.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=7.0.0,<8.0.0"

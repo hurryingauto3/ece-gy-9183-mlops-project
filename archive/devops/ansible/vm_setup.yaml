@@ -1,0 +1,128 @@
+# devops/ansible/vm_setup.yaml
+# Playbook for initial VM setup: Docker, Compose, copy code, set up user.
+
+- name: Setup VM Prerequisites and Docker
+  hosts: all # Run this play on both CPU and GPU VMs
+  become: true # Use sudo for system-level tasks
+
+  tasks:
+    - name: Ensure apt cache is up to date
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install prerequisite packages for Docker
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg-agent
+          - software-properties-common
+        state: present
+
+    - name: Add Docker's official GPG key
+      ansible.builtin.apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Set up the stable Docker repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Install Docker Engine and CLI
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+
+    - name: Install Docker Compose (using get_url to download binary)
+      ansible.builtin.get_url:
+        # Check for the latest version on https://github.com/docker/compose/releases
+        url: "https://github.com/docker/compose/releases/download/v2.20.2/docker-compose-linux-x86_64" # << Update version if needed
+        dest: /usr/local/bin/docker-compose
+        mode: '0755' # Make it executable
+        # Optional: add checksum for verification
+        # checksum: sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+    - name: Ensure docker group exists
+      ansible.builtin.group:
+        name: docker
+        state: present
+
+    - name: Add the ansible user to the docker group
+      # This allows the user (e.g., 'cc') to run docker commands without sudo
+      ansible.builtin.user:
+        name: "{{ ansible_user }}" # The user Ansible connects as (from inventory)
+        groups: docker
+        append: yes
+        # This change often requires a user re-login or 'newgrp docker' to take effect.
+        # For subsequent tasks in this playbook or other playbooks, the change might not be immediately active
+        # in the SSH session opened by Ansible. However, `docker compose` might still work,
+        # or you might need to explicitly use `sudo docker compose` if it fails.
+
+
+- name: Copy Project Code and Environment File
+  hosts: all # Run this play on both CPU and GPU VMs
+  tasks:
+    - name: Create remote project directory
+      ansible.builtin.file:
+        path: "{{ project_remote_path }}" # Variable defined in inventory.ini [all:vars]
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+
+    - name: Copy project source code to the VM
+      # Use synchronize for efficient recursive copy with exclusions
+      ansible.posix.synchronize:
+        # src: "{{ PROJECT_ROOT }}/" # This variable must be defined either globally or via -e in ansible command
+        # Let's define PROJECT_ROOT in the command when running the playbook
+        src: "./" # Assume this playbook is run from the devops/ansible directory, and the root is ../
+        # Need to adjust src path based on where you run the ansible-playbook command from
+        # If running from project root: src: "./"
+        # If running from devops/ansible: src: "../"
+        # Let's assume you run from the project root and adjust the path here:
+        src: "{{ lookup('env', 'PROJECT_ROOT') | default('.') }}/" # Read from env var PROJECT_ROOT or default to '.'
+        dest: "{{ project_remote_path }}/" # Remote destination path
+        archive: yes # Archive mode (recursive, preserves permissions, etc.)
+        checksum: yes # Skip transfers if checksums match
+        delete_after: no # Don't delete remote files not present locally
+        recursive: yes
+        links: yes
+        # compress: yes # Good for slower networks
+        # Exclude directories/files that should NOT be copied
+        exclude:
+          - .git/
+          - __pycache__/
+          - .pytest_cache/
+          - .venv/ # Exclude local virtual environments
+          - .env # Exclude the .env file here, copy it separately below for permissions
+          # Add other exclusions as needed (e.g., large data files if not sourced from Swift)
+          - "data/" # If you have a local 'data' dir, exclude it
+          - "devops/terraform/.terraform/" # Exclude terraform state dir
+          - "devops/terraform/terraform.tfstate*" # Exclude terraform state files
+
+    - name: Copy .env file to the VM
+      ansible.builtin.copy:
+        src: "{{ lookup('env', 'PROJECT_ROOT') | default('.') }}/.env" # Local .env file path
+        dest: "{{ project_remote_path }}/.env" # Remote destination
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0600' # Set strict permissions (owner read/write only)
+      # Add a conditional if .env file is optional
+      # when: ansible.builtin.stat(path="{{ lookup('env', 'PROJECT_ROOT') | default('.') }}/.env").stat.exists
+
+
+    - name: Verify .env file permissions (optional debug)
+      ansible.builtin.stat:
+        path: "{{ project_remote_path }}/.env"
+      register: env_file_stat
+      changed_when: false # Stat command doesn't change state
+
+    - name: Debug .env file permissions (optional debug)
+      ansible.builtin.debug:
+        msg: ".env file permissions on {{ inventory_hostname }}: {{ env_file_stat.stat.mode }}"
+        # The mode will be reported in octal (e.g., '0600') if set correctly

@@ -286,11 +286,11 @@ resource "openstack_networking_router_interface_v2" "router_intf_chi" {
 resource "openstack_compute_instance_v2" "gpu_node" {
   provider    = openstack.chi
   name        = "gpu-node-project4"
-  image_name  = var.gpu_image
+  image_id    = "89b991a7-7d01-4348-9cee-0c67f6f0ea90"
   flavor_name = var.gpu_flavor
   key_pair    = openstack_compute_keypair_v2.keypair.name
-  # security_groups = [data.openstack_networking_secgroup_v2.mlops_secgrp_chi.name]
-  # no security_groups declared → port_security_disabled on this network
+  # security_groups declared -> port_security_disabled on this network
+  # Note: No security group specified here, relying on network's port_security_enabled=false
 
   network {
     uuid = openstack_networking_network_v2.private_net_chi.id
@@ -314,6 +314,7 @@ resource "openstack_compute_instance_v2" "staging_node" {
   flavor_name     = var.staging_flavor
   key_pair        = openstack_compute_keypair_v2.keypair.name
   security_groups = [openstack_networking_secgroup_v2.mlops_secgrp_proj4.name]
+
 
   network {
     uuid = openstack_networking_network_v2.private_net_chi.id

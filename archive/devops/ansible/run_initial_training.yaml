@@ -1,0 +1,63 @@
+# devops/ansible/run_initial_training.yaml
+# Playbook to build the training image and run the initial training job on the GPU VM.
+
+- name: Build Training Image and Run Initial Training Job
+  hosts: gpu_vms # Target only the GPU VMs group
+  tasks:
+    - name: Navigate to project directory
+      ansible.builtin.shell: cd "{{ project_remote_path }}"
+      args:
+        chdir: "{{ project_remote_path }}"
+
+    - name: Build model-training Docker Compose service image on GPU VM
+      # Build only the specific training service image
+      community.docker.docker_compose_build:
+        project_src: "{{ project_remote_path }}"
+        services:
+          - model-training # The service name for training from docker-compose.yaml
+      # env_file: .env # Assuming .env is in project_src or pass environment variables as needed for the build
+
+    - name: Run initial model training job container
+      # Use shell module with docker compose run to execute the job
+      ansible.builtin.shell: |
+        cd "{{ project_remote_path }}" && \
+        docker compose run --rm \
+          -e MLFLOW_TRACKING_URI=http://{{ hostvars[groups['cpu_vms'][0]]['ansible_host'] }}:5000 \
+          -e MLFLOW_MODEL_NAME={{ lookup('env', 'MLFLOW_MODEL_NAME') }} \
+          -e MLFLOW_MODEL_STAGE={{ lookup('env', 'MLFLOW_MODEL_STAGE') }} \
+          -e OS_AUTH_URL={{ lookup('env', 'OS_AUTH_URL') }} \
+          -e OS_PROJECT_NAME={{ lookup('env', 'OS_PROJECT_NAME') }} \
+          -e OS_PROJECT_DOMAIN_NAME={{ lookup('env', 'OS_PROJECT_DOMAIN_NAME') }} \
+          -e OS_USERNAME={{ lookup('env', 'OS_USERNAME') }} \
+          -e OS_USER_DOMAIN_NAME={{ lookup('env', 'OS_USER_DOMAIN_NAME') }} \
+          -e OS_PASSWORD={{ lookup('env', 'OS_PASSWORD') }} \
+          -e OS_REGION_NAME={{ lookup('env', 'OS_REGION_NAME') | default('') }} \
+          -e FS_OPENSTACK_SWIFT_CONTAINER_NAME={{ lookup('env', 'FS_OPENSTACK_SWIFT_CONTAINER_NAME') }} \
+          -e TRAIN_EPOCHS={{ lookup('env', 'TRAIN_EPOCHS', default='50') }} \
+          -e TRAIN_LR={{ lookup('env', 'TRAIN_LR', default='1e-3') }} \
+          -e TRAIN_BATCH_SIZE={{ lookup('env', 'TRAIN_BATCH_SIZE', default='32') }} \
+          -e TRAIN_FIPS_EMBEDDING_DIM={{ lookup('env', 'TRAIN_FIPS_EMBEDDING_DIM', default='16') }} \
+          -e TRAIN_HIDDEN_DIM={{ lookup('env', 'TRAIN_HIDDEN_DIM', default='64') }} \
+          -e TRAIN_LSTM_LAYERS={{ lookup('env', 'TRAIN_LSTM_LAYERS', default='1') }} \
+          -e TRAIN_TCN_CHANNELS={{ lookup('env', 'TRAIN_TCN_CHANNELS', default='64,32') }} \
+          -e TRAIN_DROPOUT_RATE={{ lookup('env', 'TRAIN_DROPOUT_RATE', default='0.1') }} \
+          -e TRAIN_HOLDOUT_YEAR={{ lookup('env', 'TRAIN_HOLDOUT_YEAR', default='') }} \
+          -e TRAIN_VAL_YEAR_RATIO={{ lookup('env', 'TRAIN_VAL_YEAR_RATIO', default='0.2') }} \
+          -e TRAIN_CROP_NAME={{ lookup('env', 'TRAIN_CROP_NAME', default='corn') }} \
+          model-training python model_training/train_job.py
+      args:
+        chdir: "{{ project_remote_path }}" # Ensure shell runs in the project dir
+        executable: /bin/bash # Use bash for multi-line command and variable passing
+      # Use --rm to remove the container after it finishes
+      # Capture output and check exit code
+      register: training_run_result
+      # ignore_errors: yes # Decide if you want to ignore errors or fail the playbook
+
+    - name: Report training job output
+      ansible.builtin.debug:
+        msg: "Training job output: {{ training_run_result.stdout }}"
+
+    - name: Check training job exit status
+      ansible.builtin.fail:
+        msg: "Training job failed with exit code {{ training_run_result.rc }}. Stderr: {{ training_run_result.stderr }}"
+      when: training_run_result.rc != 0 # Fail the task if the container exited with non-zero
