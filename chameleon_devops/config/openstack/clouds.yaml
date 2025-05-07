@@ -1,0 +1,69 @@
+# This is a clouds.yaml file, which can be used by OpenStack tools as a source
+# of configuration on how to connect to a cloud. If this is your only cloud,
+# just put this file in ~/.config/openstack/clouds.yaml and tools like
+# python-openstackclient will just work with no further config. (You will need
+# to add your password to the auth section)
+# If you have more than one cloud account, add the cloud entry to the clouds
+# section of your existing file and you can refer to them by name with
+# OS_CLOUD=openstack or --os-cloud=openstack
+# clouds:
+#   uc:
+#     region_name: "CHI@UC"
+#     interface: "public"
+#     identity_api_version: 3
+#     auth_type: "v3applicationcredential"
+#     auth:
+#       auth_url: https://chi.uc.chameleoncloud.org:5000
+#       application_credential_id: "cb25b38cbf2e46c292b3e6db41a6031f"
+#       application_credential_secret: "ntDzeKvsZXGDLReTVENnX-40NoeXGjMY6wvTIvBzW8B8Uhp7LIvIDqQWnT7BbMYsLedm3UW__KKX_M81gQHWQg"
+
+#   chi:   
+#     region_name: "CHI@TACC"
+#     interface: "public"
+#     identity_api_version: 3
+#     auth_type: "v3applicationcredential"
+#     auth:
+#       auth_url: https://chi.tacc.chameleoncloud.org:5000
+#       application_credential_id: "f5989572a68047feac8c3abeff67b483"
+#       application_credential_secret: "0nimRVXbNiSpdNOXlB2D0NzUk0MwrVHoaxB67Pk2OH3rIlL62QIoDkfS2fi59De19vZJ7NnP-iI2NbQUgfVlpg"
+    
+#   kvm:   
+#     region_name: "KVM@TACC"
+#     interface: "public"
+#     identity_api_version: 3
+#     auth_type: "v3applicationcredential"
+#     auth:
+#       auth_url: https://chi.tacc.chameleoncloud.org:5000
+#       application_credential_id: "dedfb7d5e3f94bfbb6331cca69bd49ab"
+#       application_credential_secret: "zdGt_4g08mBpjni9XdN1PLTfsId6YBZGhATnI-RuNRpOoafSISPmV0-bfm-8PtQe3gHnMCMFmkQwUMTtDd7iRA"
+
+clouds:
+  kvm:
+    auth:
+      auth_url: https://kvm.tacc.chameleoncloud.org:5000
+      application_credential_id: "d70e3d0a045a475cbe144ee7fc4165b2"
+      application_credential_secret: "i6HIpgQxC7yv4E1B4FfwJ2lfJiD0rgK6P2vPVY_TXNSm2IaMltdM2vrvUZN_82jyKA6DKVL7uXJ_kHPwVDg7DQ"
+    region_name: "KVM@TACC"
+    interface: "public"
+    identity_api_version: 3
+    auth_type: "v3applicationcredential"
+
+  chi:
+    auth:
+      auth_url: https://chi.tacc.chameleoncloud.org:5000
+      application_credential_id: "5197696b4ee14e4ea618cea39fa858d2"
+      application_credential_secret: "J5JlyFe78OiaiRiVXQRsO1cv4uivczckfetFgwRdjVl9q1tkt4Cc1e8WcJvMf5tMkJxQQzZfbXDWwa8AJsj4KQ"
+    region_name: "CHI@TACC"
+    interface: "public"
+    identity_api_version: 3
+    auth_type: "v3applicationcredential"
+
+  uc:
+    auth:
+      auth_url: https://chi.uc.chameleoncloud.org:5000
+      application_credential_id: "8f342610b0664b379c31b77d25c675d0"
+      application_credential_secret: "zU32xkLrRN1MWq2oDqFHycXQ80NKHlBFIyEwid9W1igxsJWeHRGqbiPuloDYFRTbEC9xrrWzOJ94_loD7v-r0A"
+    region_name: "CHI@UC"
+    interface: "public"
+    identity_api_version: 3
+    auth_type: "v3applicationcredential"

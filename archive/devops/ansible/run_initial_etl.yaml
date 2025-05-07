@@ -1,0 +1,54 @@
+# devops/ansible/run_initial_etl.yaml
+# Playbook to run the one-off ETL job on the CPU VM.
+
+- name: Run Initial ETL Job
+  hosts: cpu_vms # Target only the CPU VMs group
+  tasks:
+    - name: Navigate to project directory on the CPU VM
+      ansible.builtin.shell: cd "{{ project_remote_path }}"
+      args:
+        chdir: "{{ project_remote_path }}" # Change directory before running commands
+      changed_when: false # This task doesn't change the system state in a way we need to track
+
+    - name: Run ETL job container using Application Credentials
+      # Use shell module with docker compose run to execute the job once
+      # This task will block until the ETL job finishes in the container.
+      ansible.builtin.shell: |
+        cd "{{ project_remote_path }}" && \
+        docker compose run --rm \
+          -e OS_AUTH_URL={{ lookup('env', 'OS_AUTH_URL') }} \
+          -e OS_AUTH_TYPE={{ lookup('env', 'OS_AUTH_TYPE') }} \
+          -e OS_APPLICATION_CREDENTIAL_ID={{ lookup('env', 'OS_APPLICATION_CREDENTIAL_ID') }} \
+          -e OS_APPLICATION_CREDENTIAL_SECRET={{ lookup('env', 'OS_APPLICATION_CREDENTIAL_SECRET') }} \
+          -e OS_PROJECT_ID={{ lookup('env', 'OS_PROJECT_ID') }} \
+          -e OS_REGION_NAME={{ lookup('env', 'OS_REGION_NAME') | default('') }} \
+          -e FS_OPENSTACK_SWIFT_CONTAINER_NAME={{ lookup('env', 'FS_OPENSTACK_SWIFT_CONTAINER_NAME') }} \
+          etl-job \
+          python drive_to_swift_etl.py \
+          {{ lookup('env', 'GOOGLE_DRIVE_FOLDER_ID') }} \
+          --swift-container {{ lookup('env', 'FS_OPENSTACK_SWIFT_CONTAINER_NAME') }} \
+          --retry 5 --clean --quiet
+      args:
+        chdir: "{{ project_remote_path }}" # Ensure shell runs in the project dir
+        executable: /bin/bash # Use bash to handle multi-line command and variable expansion
+      # The shell module waits for the command (docker compose run) to complete.
+      # The exit code of the shell command is the exit code of the container's entrypoint (your script).
+      register: etl_run_result
+      # By default, Ansible fails the task if the shell command returns a non-zero exit code.
+      # Remove 'ignore_errors: yes' if you want the playbook to stop on ETL failure.
+      # ignore_errors: yes # Decide your failure policy
+
+    - name: Report ETL job output
+      ansible.builtin.debug:
+        msg: "ETL job output:\n{{ etl_run_result.stdout }}"
+      when: etl_run_result.stdout is defined and etl_run_result.stdout | length > 0 # Only show if there's stdout
+
+    - name: Report ETL job errors (if any)
+      ansible.builtin.debug:
+        msg: "ETL job errors:\n{{ etl_run_result.stderr }}"
+      when: etl_run_result.stderr is defined and etl_run_result.stderr | length > 0 # Only show if there's stderr
+
+    - name: Check ETL job exit status and fail if non-zero
+      ansible.builtin.fail:
+        msg: "ETL job failed with exit code {{ etl_run_result.rc }}"
+      when: etl_run_result.rc != 0 # Fail the task if the shell command (container) exited with non-zero

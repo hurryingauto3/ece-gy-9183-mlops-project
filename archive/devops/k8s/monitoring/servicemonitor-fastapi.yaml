@@ -1,0 +1,16 @@
+# devops/k8s/monitoring/servicemonitor-fastapi.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: model-serving-monitor # Name for this ServiceMonitor resource
+  namespace: default # Or the namespace where your app and Prometheus run
+  labels:
+    release: prometheus # Label often used by the Helm chart to discover monitors
+spec:
+  selector:
+    matchLabels:
+      app: model-serving # IMPORTANT: Must match the labels on your Service defined in fastapi.yaml
+  endpoints:
+  - port: http # IMPORTANT: Must match the name of the port in your Service definition
+    path: /metrics # The path where metrics are exposed
+    interval: 15s # How often to scrape

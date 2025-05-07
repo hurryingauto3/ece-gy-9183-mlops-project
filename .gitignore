@@ -2,7 +2,13 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
+# Drive data folder
+drive_data/
+.vscode/
+requirements.txt
+mlops-project/
+data/data_lake
+data/data_lake_organized
 # C extensions
 *.so
 
