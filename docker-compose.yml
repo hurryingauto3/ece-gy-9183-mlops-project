@@ -1,14 +1,17 @@
 services:
   jupyter:
-    image: jupyter/base-notebook:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.jupyter
+    image: jupyter-mlflow
     container_name: jupyter-container
     ports:
-      - "8888:8888"
+      - "0.0.0.0:8888:8888"
     volumes:
       - ./notebooks:/home/jovyan/work
     environment:
       - MLFLOW_TRACKING_URI=http://mlflow:5001
-    command: start-notebook.sh --NotebookApp.token=''
+    command: start-notebook.sh --NotebookApp.token='' --NotebookApp.ip=0.0.0.0 --NotebookApp.allow_origin='*'
     restart: unless-stopped
     depends_on:
       - mlflow
