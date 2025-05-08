@@ -3,6 +3,7 @@
   vars:
     project_remote_path: "/home/{{ ansible_user }}/mlops-project"
   roles:
+    - storage
     - docker_install
     - docker_compose
     - copy_configs

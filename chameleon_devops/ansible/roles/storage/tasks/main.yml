@@ -1,0 +1,71 @@
+---
+- name: Make ext4 filesystem on /dev/vdb (block storage)
+  filesystem:
+    fstype: ext4
+    dev: /dev/vdb
+  become: true
+
+- name: Create mount point for block storage
+  file:
+    path: /mnt/project4-block
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Mount block device at /mnt/project4-block
+  mount:
+    path: /mnt/project4-block
+    src: /dev/vdb
+    fstype: ext4
+    opts: defaults
+    state: mounted
+  become: true
+
+- name: Create mount point for object store
+  file:
+    path: /mnt/project4-object
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Ensure rclone is installed (for Swift FUSE)
+  apt:
+    name: rclone
+    state: latest
+  become: true
+
+- name: Allow FUSE mounts for non‑root users
+  lineinfile:
+    path: /etc/fuse.conf
+    regexp: '^#user_allow_other'
+    line: 'user_allow_other'
+  become: true
+
+- name: Write rclone.conf with Swift creds
+  copy:
+    dest: "{{ ansible_env.HOME }}/.config/rclone/rclone.conf"
+    mode: '0600'
+    content: |
+      [chi_tacc]
+      type                    = swift
+      auth                    = https://chi.tacc.chameleoncloud.org:5000/v3
+      region                  = CHI@TACC
+      user_id                 = {{ swift_user_id }}
+      application_credential_id     = {{ swift_app_cred_id }}
+      application_credential_secret = {{ swift_app_cred_secret }}
+  become: true
+
+- name: Mount Swift container via rclone (object store)
+  shell: |
+    rclone mount chi_tacc:CropNet-project4 /mnt/project4-object \
+      --allow-other --daemon \
+      --config="{{ ansible_env.HOME }}/.config/rclone/rclone.conf"
+  args:
+    creates: /mnt/project4-object/.rclone_mounted
+  become: true
+
+- name: Touch marker so we don’t remount Swift
+  file:
+    path: /mnt/project4-object/.rclone_mounted
+    state: touch
+  become: true

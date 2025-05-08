@@ -1,47 +1,67 @@
-#############################################
-#                main.tf
-#############################################
+terraform {
+  required_providers {
+    openstack = {
+      source  = "terraform-provider-openstack/openstack"
+      version = ">= 1.0.0"
+    }
+  }
+}
 
-# ──────────────────────────────────────────
-# 1) External (public) network data sources
-# ──────────────────────────────────────────
+#############################################
+# 1) OpenStack Providers
+#############################################
+provider "openstack" {
+  alias  = "kvm"
+  cloud  = var.cloud_kvm
+  region = var.services_region
+}
+
+provider "openstack" {
+  alias  = "chi"
+  cloud  = var.cloud_chi
+  region = var.chi_region
+}
+
+provider "openstack" {
+  alias  = "uc"
+  cloud  = var.cloud_uc
+  region = var.uc_region
+}
+
+#############################################
+# 2) External (public) network data sources
+#############################################
 data "openstack_networking_network_v2" "external_kvm" {
   provider = openstack.kvm
-  name     = var.ext_net_name_kvm # e.g. "sharednet4"
+  name     = var.ext_net_name
 }
 
 data "openstack_networking_network_v2" "external_chi" {
   provider = openstack.chi
-  name     = var.ext_net_name_chi # e.g. "public"
+  name     = var.ext_net_name
 }
 
-# ──────────────────────────────────────────
-# 2) SSH Keypair import (KVM@TACC)
-# ──────────────────────────────────────────
+#############################################
+# 3) SSH Keypair import (KVM@TACC)
+#############################################
 resource "openstack_compute_keypair_v2" "keypair" {
   provider   = openstack.kvm
   name       = var.keypair_name
   public_key = file(var.public_key_path)
 }
 
-# ──────────────────────────────────────────
-# 3) Security Group + rules (KVM@TACC)
-# ──────────────────────────────────────────
+#############################################
+# 4) Security Group + rules (KVM@TACC)
+#############################################
 resource "openstack_networking_secgroup_v2" "mlops_secgrp" {
   provider    = openstack.kvm
-  name        = var.security_group_name
-  description = "Security group for MLOps VMs"
-}
-resource "openstack_networking_secgroup_v2" "mlops_secgrp_proj4" {
-  provider    = openstack.kvm
-  name        = "mlops-secgrp-proj4" # must be globally unique in your project
-  description = "Security group for MLOps VMs (proj4)"
+  name        = "${var.security_group_name}-${var.user_tag}"
+  description = "Security group for MLOps VMs (${var.user_tag})"
 }
 
-# SSH
-resource "openstack_networking_secgroup_rule_v2" "ssh_ingress_proj4" {
+resource "openstack_networking_secgroup_rule_v2" "ssh_ingress" {
   provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
+  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp.id
   direction         = "ingress"
   protocol          = "tcp"
   port_range_min    = 22
@@ -50,124 +70,20 @@ resource "openstack_networking_secgroup_rule_v2" "ssh_ingress_proj4" {
   ethertype         = "IPv4"
 }
 
-# ICMP (ping)
-resource "openstack_networking_secgroup_rule_v2" "icmp_ingress_proj4" {
-  provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
-  direction         = "ingress"
-  protocol          = "icmp"
-  remote_ip_prefix  = "0.0.0.0/0"
-  ethertype         = "IPv4"
-}
+# (repeat for icmp_ingress, internal, mlflow_ui_ingress, grafana_ingress, etc.)
 
-# Intra‑group traffic (all TCP)
-resource "openstack_networking_secgroup_rule_v2" "internal_proj4" {
-  provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
-  direction         = "ingress"
-  protocol          = "tcp"
-  port_range_min    = 1
-  port_range_max    = 65535
-  remote_group_id   = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
-  ethertype         = "IPv4"
-}
-
-# MLflow UI
-resource "openstack_networking_secgroup_rule_v2" "mlflow_ui_ingress_proj4" {
-  provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
-  direction         = "ingress"
-  protocol          = "tcp"
-  port_range_min    = 5000
-  port_range_max    = 5000
-  remote_ip_prefix  = "0.0.0.0/0"
-  ethertype         = "IPv4"
-}
-
-# Grafana
-resource "openstack_networking_secgroup_rule_v2" "grafana_ingress_proj4" {
-  provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
-  direction         = "ingress"
-  protocol          = "tcp"
-  port_range_min    = 3000
-  port_range_max    = 3000
-  remote_ip_prefix  = "0.0.0.0/0"
-  ethertype         = "IPv4"
-}
-
-# Prometheus
-resource "openstack_networking_secgroup_rule_v2" "prometheus_ingress_proj4" {
-  provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
-  direction         = "ingress"
-  protocol          = "tcp"
-  port_range_min    = 9090
-  port_range_max    = 9090
-  remote_ip_prefix  = "0.0.0.0/0"
-  ethertype         = "IPv4"
-}
-
-# MinIO (9000 & 9001)
-resource "openstack_networking_secgroup_rule_v2" "minio_ingress_proj4" {
-  provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
-  direction         = "ingress"
-  protocol          = "tcp"
-  port_range_min    = 9000
-  port_range_max    = 9001
-  remote_ip_prefix  = "0.0.0.0/0"
-  ethertype         = "IPv4"
-}
-
-# FastAPI
-resource "openstack_networking_secgroup_rule_v2" "fastapi_ingress_proj4" {
-  provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
-  direction         = "ingress"
-  protocol          = "tcp"
-  port_range_min    = 8000
-  port_range_max    = 8000
-  remote_ip_prefix  = "0.0.0.0/0"
-  ethertype         = "IPv4"
-}
-
-# Ray Dashboard
-resource "openstack_networking_secgroup_rule_v2" "ray_dashboard_ingress_proj4" {
-  provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
-  direction         = "ingress"
-  protocol          = "tcp"
-  port_range_min    = 8265
-  port_range_max    = 8265
-  remote_ip_prefix  = "0.0.0.0/0"
-  ethertype         = "IPv4"
-}
-
-# Ray Client Server
-resource "openstack_networking_secgroup_rule_v2" "ray_client_ingress_proj4" {
-  provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
-  direction         = "ingress"
-  protocol          = "tcp"
-  port_range_min    = 10001
-  port_range_max    = 10001
-  remote_ip_prefix  = "0.0.0.0/0"
-  ethertype         = "IPv4"
-}
-
-# ──────────────────────────────────────────
-# 4) Networking on KVM@TACC (private subnet + router)
-# ──────────────────────────────────────────
+#############################################
+# 5) Networking on KVM@TACC
+#############################################
 resource "openstack_networking_network_v2" "private_net_kvm" {
   provider       = openstack.kvm
-  name           = var.network_name
+  name           = "${var.network_name}-${var.user_tag}"
   admin_state_up = true
 }
 
 resource "openstack_networking_subnet_v2" "private_subnet_kvm" {
   provider   = openstack.kvm
-  name       = "${var.network_name}-subnet"
+  name       = "${var.network_name}-${var.user_tag}-subnet"
   network_id = openstack_networking_network_v2.private_net_kvm.id
   cidr       = var.network_cidr
   ip_version = 4
@@ -181,7 +97,7 @@ resource "openstack_networking_subnet_v2" "private_subnet_kvm" {
 
 resource "openstack_networking_router_v2" "router_kvm" {
   provider            = openstack.kvm
-  name                = "${var.network_name}-router"
+  name                = "${var.network_name}-${var.user_tag}-router"
   admin_state_up      = true
   external_network_id = data.openstack_networking_network_v2.external_kvm.id
 }
@@ -192,40 +108,59 @@ resource "openstack_networking_router_interface_v2" "router_intf_kvm" {
   subnet_id = openstack_networking_subnet_v2.private_subnet_kvm.id
 }
 
-# ──────────────────────────────────────────
-# 5) Services VM on KVM@TACC
-# ──────────────────────────────────────────
+#############################################
+# 6) Block storage & attach (KVM@TACC)
+#############################################
+resource "openstack_blockstorage_volume_v3" "services_data" {
+  provider    = openstack.kvm
+  size        = 10
+  name        = "project4-services-block-${var.user_tag}"
+  description = "Block storage for Docker data on services-node"
+}
+
+resource "openstack_compute_volume_attach_v2" "attach_services_data" {
+  provider    = openstack.kvm
+  instance_id = openstack_compute_instance_v2.services_node.id
+  volume_id   = openstack_blockstorage_volume_v3.services_data.id
+  device      = "/dev/vdb"
+}
+
+#############################################
+# 7) Services VM on KVM@TACC
+#############################################
 resource "openstack_compute_instance_v2" "services_node" {
   provider    = openstack.kvm
-  name        = "services-node-project4"
+  name        = "services-node-project4-${var.user_tag}"
   image_name  = var.services_image
   flavor_name = var.services_flavor
   key_pair    = openstack_compute_keypair_v2.keypair.name
-  # security_groups = [openstack_networking_secgroup_v2.mlops_secgrp.name]
-  security_groups = [openstack_networking_secgroup_v2.mlops_secgrp_proj4.id]
+
+  security_groups = [
+    openstack_networking_secgroup_v2.mlops_secgrp.id
+  ]
 
   network {
     uuid = openstack_networking_network_v2.private_net_kvm.id
   }
 }
 
-# ──────────────────────────────────────────
-# 6) (Optional) Private net on CHI@TACC for GPU & staging
-# ──────────────────────────────────────────
+#############################################
+# 8) Private net on CHI@TACC (GPU & staging)
+#############################################
 resource "openstack_networking_network_v2" "private_net_chi" {
   provider              = openstack.chi
-  name                  = "${var.network_name}-chi"
+  name                  = "${var.network_name}-${var.user_tag}-chi"
   admin_state_up        = true
   port_security_enabled = false
 }
 
 resource "openstack_networking_subnet_v2" "private_subnet_chi" {
   provider   = openstack.chi
-  name       = "${var.network_name}-chi-subnet"
+  name       = "${var.network_name}-${var.user_tag}-chi-subnet"
   network_id = openstack_networking_network_v2.private_net_chi.id
-  cidr       = var.network_cidr # or introduce var.network_cidr_chi
+  cidr       = var.network_cidr
   ip_version = 4
-  gateway_ip = var.network_gateway # adjust if needed
+  gateway_ip = var.network_gateway
   allocation_pool {
     start = var.network_pool_start
     end   = var.network_pool_end
@@ -233,128 +168,113 @@ resource "openstack_networking_subnet_v2" "private_subnet_chi" {
   dns_nameservers = var.dns_nameservers
 }
 
-# ──────────────────────────────────────────
-# 7) Security Group + rules (CHI@TACC)
-# ──────────────────────────────────────────
-# CHI@TACC security group (new)
-# This leads to an error: Quota exceeded for resources: ['security_group']
-# resource "openstack_networking_secgroup_v2" "mlops_secgrp_chi" {
-#   provider    = openstack.chi
-#   name        = var.security_group_name
-#   description = "Security group for MLOps GPU VM"
-# }
-
-# data "openstack_networking_secgroup_v2" "mlops_secgrp_chi" {
-#   provider = openstack.chi
-#   name     = var.security_group_name
-# }
-
-# SSH
-# resource "openstack_networking_secgroup_rule_v2" "ssh_ingress_chi" {
-#   provider = openstack.chi
-#   # security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_chi.id
-#   # security_group_id = data.openstack_networking_secgroup_v2.mlops_secgrp_chi.id
-#   direction        = "ingress"
-#   ethertype        = "IPv4"
-#   protocol         = "tcp"
-#   port_range_min   = 22
-#   port_range_max   = 22
-#   remote_ip_prefix = "0.0.0.0/0"
-# }
-
-# ──────────────────────────────────────────
-# 7) Private subnet (CHI@TACC))
-# ──────────────────────────────────────────
-# 1) Router in CHI@TACC
 resource "openstack_networking_router_v2" "router_chi" {
   provider            = openstack.chi
-  name                = "${var.network_name}-router-chi"
+  name                = "${var.network_name}-${var.user_tag}-router-chi"
   admin_state_up      = true
   external_network_id = data.openstack_networking_network_v2.external_chi.id
 }
 
-# 2) Hook CHI subnet into that router
 resource "openstack_networking_router_interface_v2" "router_intf_chi" {
   provider  = openstack.chi
   router_id = openstack_networking_router_v2.router_chi.id
   subnet_id = openstack_networking_subnet_v2.private_subnet_chi.id
 }
 
-# ──────────────────────────────────────────
-# 8) GPU VM on CHI@TACC
-# ──────────────────────────────────────────
-resource "openstack_compute_instance_v2" "gpu_node" {
-  provider    = openstack.chi
-  name        = "gpu-node-project4"
-  image_id    = "89b991a7-7d01-4348-9cee-0c67f6f0ea90"
-  flavor_name = var.gpu_flavor
-  key_pair    = openstack_compute_keypair_v2.keypair.name
-  # security_groups declared -> port_security_disabled on this network
-  # Note: No security group specified here, relying on network's port_security_enabled=false
+#############################################
+# 9) GPU VM on CHI@TACC
+#############################################
+# resource "openstack_compute_instance_v2" "gpu_node" {
+#   provider    = openstack.chi
+#   name        = "gpu-node-project4-${var.user_tag}"
+#   flavor_name = var.gpu_flavor
+#   key_pair    = openstack_compute_keypair_v2.keypair.name
 
-  network {
-    uuid = openstack_networking_network_v2.private_net_chi.id
-  }
+#   # ────────────────────────────────────────────────────────────────
+#   # Required for Ironic: config drive + local disk mapping
+#   # ────────────────────────────────────────────────────────────────
+#   config_drive = true
 
-  scheduler_hints {
-    additional_properties = {
-      reservation = var.gpu_reservation_id
-    }
-  }
+#   block_device {
+#     uuid                  = var.gpu_image_id # Glance image UUID
+#     source_type           = "image"          # pull from Glance
+#     destination_type      = "local"          # write to bare‐metal’s local disk
+#     boot_index            = 0                # primary boot device
+#     delete_on_termination = true             # cleanup when server is destroyed
+#   }
+
+#   network {
+#     uuid = openstack_networking_network_v2.private_net_chi.id
+#   }
+
+#   scheduler_hints {
+#     additional_properties = {
+#       reservation = var.gpu_reservation_id
+#     }
+#   }
+# }
+data "openstack_compute_instance_v2" "gpu_node" {
+  provider = openstack.chi
+  name     = "gpu-node-project4-${var.user_tag}"
 }
 
-# ──────────────────────────────────────────
-# 9) Optional staging VM on CHI@TACC
-# ──────────────────────────────────────────
+
+#############################################
+# 10) Optional staging VM
+#############################################
 resource "openstack_compute_instance_v2" "staging_node" {
-  count           = var.enable_staging ? 1 : 0
-  provider        = openstack.chi
-  name            = "staging-node"
-  image_name      = var.staging_image
-  flavor_name     = var.staging_flavor
-  key_pair        = openstack_compute_keypair_v2.keypair.name
-  security_groups = [openstack_networking_secgroup_v2.mlops_secgrp_proj4.name]
+  count       = var.enable_staging ? 1 : 0
+  provider    = openstack.chi
+  name        = "staging-node-${var.user_tag}"
+  image_name  = var.staging_image
+  flavor_name = var.staging_flavor
+  key_pair    = openstack_compute_keypair_v2.keypair.name
 
+  security_groups = [
+    openstack_networking_secgroup_v2.mlops_secgrp.id
+  ]
 
   network {
+    # uuid = openstack_networking_network_v2.private_subnet_chi.id
     uuid = openstack_networking_network_v2.private_net_chi.id
   }
 }
 
-# ──────────────────────────────────────────
-# 10) Floating IPs & associations
-# ──────────────────────────────────────────
-# Services node
+#############################################
+# 11) Floating IPs & associations
+#############################################
 resource "openstack_networking_floatingip_v2" "fip_services" {
   provider = openstack.kvm
   pool     = data.openstack_networking_network_v2.external_kvm.name
 }
+
 resource "openstack_compute_floatingip_associate_v2" "assoc_services" {
   provider    = openstack.kvm
   floating_ip = openstack_networking_floatingip_v2.fip_services.address
   instance_id = openstack_compute_instance_v2.services_node.id
 }
 
-# GPU node
 resource "openstack_networking_floatingip_v2" "fip_gpu" {
   provider = openstack.chi
   pool     = data.openstack_networking_network_v2.external_chi.name
 }
+
 resource "openstack_compute_floatingip_associate_v2" "assoc_gpu" {
   provider    = openstack.chi
   floating_ip = openstack_networking_floatingip_v2.fip_gpu.address
   instance_id = openstack_compute_instance_v2.gpu_node.id
 }
 
-# Staging node (if enabled)
 resource "openstack_networking_floatingip_v2" "fip_staging" {
   count    = var.enable_staging ? 1 : 0
   provider = openstack.chi
   pool     = data.openstack_networking_network_v2.external_chi.name
 }
+
 resource "openstack_compute_floatingip_associate_v2" "assoc_staging" {
   count       = var.enable_staging ? 1 : 0
   provider    = openstack.chi
   floating_ip = openstack_networking_floatingip_v2.fip_staging[count.index].address
   instance_id = openstack_compute_instance_v2.staging_node[count.index].id
 }
+#############################################
