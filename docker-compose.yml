@@ -269,3 +269,4 @@ volumes:
   mlflow_artifact_data:
   prometheus_data:
   grafana_data:
+  persistent_data:
