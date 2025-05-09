@@ -167,71 +167,71 @@ services:
       - prometheus
 
 # --- ETL Job Service ---
-  etl-download:
-    build: ./etl_pipeline/extract
-    container_name: etl-extract-container
-    volumes:
-      # - ./local_data:/app/data_lake
-      # - /mnt/persistent/data_lake:/app/data_lake  # use persistent storage
-      - /home/cc/swift_s3:/mnt/swift_store
-    # Add this command section:
-    command:
-      - poetry
-      - run
-      - python # Or /usr/local/bin/python3 depending on your base image/install
-      - /app/drive_to_swift_etl.py # Path to your script inside the container
-      - ${GOOGLE_DRIVE_FOLDER_ID_HRRR} # Positional argument folder_id
-      - ${GOOGLE_DRIVE_FOLDER_ID_USDA} 
-      # - --swift-container # Named argument flag
-      # - ${FS_OPENSTACK_SWIFT_CONTAINER_NAME} # Named argument value
-      - --clean # Optional: Add --clean flag if you want it to clean up locally
+  # etl-download:
+  #   build: ./etl_pipeline/extract
+  #   container_name: etl-extract-container
+  #   volumes:
+  #     # - ./local_data:/app/data_lake
+  #     # - /mnt/persistent/data_lake:/app/data_lake  # use persistent storage
+  #     - /home/cc/swift_s3:/mnt/swift_store
+  #   # Add this command section:
+  #   command:
+  #     - poetry
+  #     - run
+  #     - python # Or /usr/local/bin/python3 depending on your base image/install
+  #     - /app/drive_to_swift_etl.py # Path to your script inside the container
+  #     - ${GOOGLE_DRIVE_FOLDER_ID_HRRR} # Positional argument folder_id
+  #     - ${GOOGLE_DRIVE_FOLDER_ID_USDA} 
+  #     # - --swift-container # Named argument flag
+  #     # - ${FS_OPENSTACK_SWIFT_CONTAINER_NAME} # Named argument value
+  #     - --clean # Optional: Add --clean flag if you want it to clean up locally
 
-    environment:
-      # Explicitly pass OpenStack credentials to the container
-      # These are needed by the openstack SDK within the script
-      - OS_AUTH_URL=${OS_AUTH_URL}
-      - OS_AUTH_TYPE=${OS_AUTH_TYPE}
-      - OS_APPLICATION_CREDENTIAL_ID=${OS_APPLICATION_CREDENTIAL_ID}
-      - OS_APPLICATION_CREDENTIAL_SECRET=${OS_APPLICATION_CREDENTIAL_SECRET}
-      - OS_REGION_NAME=${OS_REGION_NAME}
-      # Pass the container name as env var as well, useful for debugging
-      # although the script reads it from command line via compose args
-      # - FS_OPENSTACK_SWIFT_CONTAINER_NAME=${FS_OPENSTACK_SWIFT_CONTAINER_NAME}
-      # Pass the folder ID as env var as well, useful for debugging
-      - GOOGLE_DRIVE_FOLDER_ID_HRRR=${GOOGLE_DRIVE_FOLDER_ID_HRRR}
-      - GOOGLE_DRIVE_FOLDER_ID_USDA=${GOOGLE_DRIVE_FOLDER_ID_USDA}
+  #   environment:
+  #     # Explicitly pass OpenStack credentials to the container
+  #     # These are needed by the openstack SDK within the script
+  #     - OS_AUTH_URL=${OS_AUTH_URL}
+  #     - OS_AUTH_TYPE=${OS_AUTH_TYPE}
+  #     - OS_APPLICATION_CREDENTIAL_ID=${OS_APPLICATION_CREDENTIAL_ID}
+  #     - OS_APPLICATION_CREDENTIAL_SECRET=${OS_APPLICATION_CREDENTIAL_SECRET}
+  #     - OS_REGION_NAME=${OS_REGION_NAME}
+  #     # Pass the container name as env var as well, useful for debugging
+  #     # although the script reads it from command line via compose args
+  #     # - FS_OPENSTACK_SWIFT_CONTAINER_NAME=${FS_OPENSTACK_SWIFT_CONTAINER_NAME}
+  #     # Pass the folder ID as env var as well, useful for debugging
+  #     - GOOGLE_DRIVE_FOLDER_ID_HRRR=${GOOGLE_DRIVE_FOLDER_ID_HRRR}
+  #     - GOOGLE_DRIVE_FOLDER_ID_USDA=${GOOGLE_DRIVE_FOLDER_ID_USDA}
 
-  etl-transform:
-    profiles: ["gpu"]
-    build: ./etl_pipeline/transform
-    container_name: etl-transform-container
-    volumes:
-      # - ./local_data:/app/data_lake  # Fetch data from local VM storage
-      # - persistent_data:/mnt/project4/data
-      - /mnt/persistent/data_lake:/app/data_lake
-      - /mnt/persistent/project4/data:/mnt/project4/data
-    # Add this command section:
-    command:
-      - poetry
-      - run
-      - python # Or /usr/local/bin/python3 depending on your base image/install
-      - /app/transform.py # Path to your script inside the container
-      - --swift-container # Named argument flag
-      - ${FS_OPENSTACK_SWIFT_CONTAINER_NAME} # Named argument value
-      - --clean # Optional: Add --clean flag if you want it to clean up locally
+  # etl-transform:
+  #   profiles: ["gpu"]
+  #   build: ./etl_pipeline/transform
+  #   container_name: etl-transform-container
+  #   volumes:
+  #     # - ./local_data:/app/data_lake  # Fetch data from local VM storage
+  #     # - persistent_data:/mnt/project4/data
+  #     - /mnt/persistent/data_lake:/app/data_lake
+  #     - /mnt/persistent/project4/data:/mnt/project4/data
+  #   # Add this command section:
+  #   command:
+  #     - poetry
+  #     - run
+  #     - python # Or /usr/local/bin/python3 depending on your base image/install
+  #     - /app/transform.py # Path to your script inside the container
+  #     - --swift-container # Named argument flag
+  #     - ${FS_OPENSTACK_SWIFT_CONTAINER_NAME} # Named argument value
+  #     - --clean # Optional: Add --clean flag if you want it to clean up locally
 
-    environment:
-      # Explicitly pass OpenStack credentials to the container
-      # These are needed by the openstack SDK within the script
-      - OS_AUTH_URL=${OS_AUTH_URL}
-      - OS_AUTH_TYPE=${OS_AUTH_TYPE}
-      - OS_APPLICATION_CREDENTIAL_ID=${OS_APPLICATION_CREDENTIAL_ID}
-      - OS_APPLICATION_CREDENTIAL_SECRET=${OS_APPLICATION_CREDENTIAL_SECRET}
-      - OS_REGION_NAME=${OS_REGION_NAME}
-      # Pass the container name as env var as well, useful for debugging
-      # although the script reads it from command line via compose args
-      - FS_OPENSTACK_SWIFT_CONTAINER_NAME=${FS_OPENSTACK_SWIFT_CONTAINER_NAME}
-      # Pass the folder ID as env var as well, useful for debugging
+  #   environment:
+  #     # Explicitly pass OpenStack credentials to the container
+  #     # These are needed by the openstack SDK within the script
+  #     - OS_AUTH_URL=${OS_AUTH_URL}
+  #     - OS_AUTH_TYPE=${OS_AUTH_TYPE}
+  #     - OS_APPLICATION_CREDENTIAL_ID=${OS_APPLICATION_CREDENTIAL_ID}
+  #     - OS_APPLICATION_CREDENTIAL_SECRET=${OS_APPLICATION_CREDENTIAL_SECRET}
+  #     - OS_REGION_NAME=${OS_REGION_NAME}
+  #     # Pass the container name as env var as well, useful for debugging
+  #     # although the script reads it from command line via compose args
+  #     - FS_OPENSTACK_SWIFT_CONTAINER_NAME=${FS_OPENSTACK_SWIFT_CONTAINER_NAME}
+  #     # Pass the folder ID as env var as well, useful for debugging
 
 
   # --- Model Training Job Service ---
