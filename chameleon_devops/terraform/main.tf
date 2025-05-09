@@ -446,7 +446,7 @@ resource "openstack_compute_floatingip_associate_v2" "assoc_staging" {
   provider    = openstack.chi
   floating_ip = openstack_networking_floatingip_v2.fip_staging[count.index].address
   instance_id = openstack_compute_instance_v2.staging_node[count.index].id
-
+}
 
 
 # STORAGE
