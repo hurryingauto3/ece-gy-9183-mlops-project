@@ -75,7 +75,8 @@ services:
     build: ./etl_pipeline/extract
     container_name: etl-extract-container
     volumes:
-      - ./local_data:/app/data_lake 
+      # - ./local_data:/app/data_lake
+      - /mnt/persistent/data_lake:/app/data_lake  # use persistent storage
     # Add this command section:
     command:
       - poetry
@@ -107,8 +108,10 @@ services:
     build: ./etl_pipeline/transform
     container_name: etl-transform-container
     volumes:
-      - ./local_data:/app/data_lake  # Fetch data from local VM storage
-      - persistent_data:/mnt/project4/data
+      # - ./local_data:/app/data_lake  # Fetch data from local VM storage
+      # - persistent_data:/mnt/project4/data
+      - /mnt/persistent/data_lake:/app/data_lake
+      - /mnt/persistent/project4/data:/mnt/project4/data
     # Add this command section:
     command:
       - poetry
