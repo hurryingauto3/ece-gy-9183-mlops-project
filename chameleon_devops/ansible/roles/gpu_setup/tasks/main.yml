@@ -1,35 +1,213 @@
 ---
 # ansible/roles/gpu_setup/tasks/main.yml
-# Installs NVIDIA Container Toolkit and configures Docker to use the nvidia runtime.
 
-- name: Add NVIDIA Container Toolkit GPG key
-  ansible.builtin.apt_key:
-    url: https://nvidia.github.io/libnvidia-container/gpgkey
-    keyring: /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-    state: present
-
-- name: Add NVIDIA Container Toolkit apt repository
-  ansible.builtin.apt_repository:
-    repo: >-
-      deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg]
-      https://nvidia.github.io/libnvidia-container/stable/deb/amd64
-      /
-    filename: nvidia-container-toolkit
-    state: present
-
+# 1) Ensure we have s3fs installed
 - name: Update apt cache
-  ansible.builtin.apt:
+  apt:
     update_cache: yes
     cache_valid_time: 3600
 
+- name: Install s3fs
+  apt:
+    name: s3fs
+    state: present
+
+# 2) Put your EC2 creds where root can read them
+- name: Create /etc/s3fs-creds with EC2 credentials
+  copy:
+    dest: /etc/s3fs-creds
+    content: "{{ ec2_access_key }}:{{ ec2_secret_key }}"
+    owner: root
+    group: root
+    mode: '0600'
+
+# 3) Clean out any old s3fs lines in fstab
+- name: Remove old s3fs entries from /etc/fstab
+  lineinfile:
+    path: /etc/fstab
+    regexp: '^object-store_project4'
+    state: absent
+
+# 4) Add the single correct s3fs line
+- name: Add s3fs mount entry to /etc/fstab
+  lineinfile:
+    path: /etc/fstab
+    line: >-
+      object-store_project4 /home/{{ ansible_user }}/swift_s3 fuse.s3fs
+      _netdev,allow_other,use_path_request_style,
+      url=https://chi.uc.chameleoncloud.org:7480,
+      passwd_file=/etc/s3fs-creds,
+      uid={{ ansible_uid | default(1000) }},
+      gid={{ ansible_gid | default(1000) }} 0 0
+    create: yes
+
+- name: Reload systemd to pick up fstab changes
+  command: systemctl daemon-reexec
+
+# 5) Ensure the mount point exists
+- name: Create swift_s3 mount point directory
+  file:
+    path: /home/{{ ansible_user }}/swift_s3
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+# 6) Mount the object store via fstab
+# - name: Mount Chameleon Swift object store
+#   mount:
+#     path: /home/{{ ansible_user }}/swift_s3
+#     src: object-store_project4
+#     fstype: fuse.s3fs
+#     opts: _netdev
+#     state: mounted
+
+- name: Remove any old s3fs entries
+  lineinfile:
+    path: /etc/fstab
+    regexp: '^object-store_project4'
+    state: absent
+
+# - name: Insert correct s3fs fstab entry
+#   lineinfile:
+#     path: /etc/fstab
+#     line: >-
+#       object-store_project4 /home/{{ ansible_user }}/swift_s3 fuse.s3fs
+#       _netdev,allow_other,use_path_request_style,
+#       url=https://chi.uc.chameleoncloud.org:7480,
+#       passwd_file=/etc/s3fs-creds,
+#       uid={{ ansible_uid | default(1000) }},
+#       gid={{ ansible_gid | default(1000) }} 0 0
+#     create: yes
+
+- name: Insert correct s3fs fstab entry
+  lineinfile:
+    path: /etc/fstab
+    regexp: '^object-store_project4'
+    line: 'object-store_project4 /home/{{ ansible_user }}/swift_s3 fuse.s3fs _netdev,allow_other,use_path_request_style,url=https://chi.uc.chameleoncloud.org:7480,passwd_file=/etc/s3fs-creds,uid={{ ansible_uid|default(1000) }},gid={{ ansible_gid|default(1000) }},nonempty 0 0'
+    create: yes
+
+- name: Reload systemd to pick up fstab
+  command: systemctl daemon-reexec
+
+# - name: Mount the Swift object store
+#   mount:
+#     path: /home/{{ ansible_user }}/swift_s3
+#     src: object-store_project4
+#     fstype: fuse.s3fs
+#     opts: _netdev
+#     state: mounted
+# - name: Mount the Swift object store (using /etc/fstab)
+#   mount:
+#     path: /home/{{ ansible_user }}/swift_s3
+#     state: mounted
+
+- name: Mount the Swift object store via fstab
+  ansible.builtin.command:
+    cmd: mount /home/{{ ansible_user }}/swift_s3
+  register: mount_result
+  failed_when: mount_result.rc not in [0, 32]
+
+
+# # 7) NVIDIA Container Toolkit setup
+# # 7.1) Figure out distro string (e.g. ubuntu22.04)
+# - name: Determine NVIDIA repo distribution string
+#   set_fact:
+#     nvc_distro: "{{ ansible_facts['distribution'] | lower }}{{ ansible_facts['distribution_version'] | regex_replace('\\..*','') }}"
+
+# # 7.2) Add NVIDIA GPG key
+# - name: Add NVIDIA Container Toolkit GPG key
+#   apt_key:
+#     url: https://nvidia.github.io/libnvidia-container/gpgkey
+#     keyring: /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+#     state: present
+
+# # 7.3) Fetch the correct list file for your distro
+# - name: Fetch NVIDIA Container Toolkit apt repo list
+#   get_url:
+#     url: "https://nvidia.github.io/libnvidia-container/{{ nvc_distro }}/libnvidia-container.list"
+#     dest: /etc/apt/sources.list.d/nvidia-container-toolkit.list
+#     mode: '0644'
+
+# # 7.4) Refresh apt cache now that the list is valid
+# - name: Update apt cache (after NVIDIA repo)
+#   apt:
+#     update_cache: yes
+
+# - name: Install NVIDIA Container Toolkit
+#   apt:
+#     name: nvidia-container-toolkit
+#     state: latest
+
+# - name: Configure Docker to use the NVIDIA runtime
+#   command: nvidia-ctk runtime configure --runtime=docker
+
+# - name: Restart Docker via systemd
+#   systemd:
+#     name: docker
+#     state: restarted
+#   ignore_errors: true
+
+# - name: Restart Docker (fallback)
+#   shell: service docker restart
+#   when: ansible_service_mgr != "systemd"
+#   ignore_errors: true
+
+###############################################################################
+# NVIDIA Container Toolkit installation (using NVIDIA’s two‑curl recipe)
+###############################################################################
+
+- name: Ensure apt-transport-https is installed
+  apt:
+    name: apt-transport-https
+    state: present
+    update_cache: yes
+
+- name: Download NVIDIA GPG key and install to keyring
+  ansible.builtin.command: >
+    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey
+    | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+  args:
+    creates: /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+
+# - name: Download and rewrite NVIDIA toolkit list file
+#   ansible.builtin.command: >
+#     curl -sL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list
+#     | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g'
+#     | tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+#   args:
+#     creates: /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+- name: Download and rewrite NVIDIA toolkit list file
+  shell: |
+    curl -sL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+    | sed \
+        -e 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+        -e 's#\$(ARCH)#amd64#g' \
+    | tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+  args:
+    creates: /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+
+- name: Update apt cache after adding NVIDIA repo
+  apt:
+    update_cache: yes
+
 - name: Install NVIDIA Container Toolkit
-  ansible.builtin.apt:
+  apt:
     name: nvidia-container-toolkit
     state: latest
 
-- name: Configure Docker to use the NVIDIA runtime and restart service
-  ansible.builtin.shell: |
-    nvidia-ctk runtime configure --runtime=docker
-    systemctl restart docker
-  args:
-    executable: /bin/bash
+- name: Configure Docker to use the NVIDIA runtime
+  command: nvidia-ctk runtime configure --runtime=docker
+
+- name: Restart Docker via systemd
+  systemd:
+    name: docker
+    state: restarted
+  ignore_errors: true
+
+- name: Restart Docker (fallback)
+  shell: service docker restart
+  when: ansible_service_mgr != "systemd"
+  ignore_errors: true

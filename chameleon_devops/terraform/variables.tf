@@ -166,3 +166,19 @@ variable "dns_nameservers" {
   type        = list(string)
   default     = ["8.8.8.8", "8.8.4.4"]
 }
+
+variable "gpu_image_id_uc" {
+  description = "GPU image UUID for CHI@UC"
+  type        = string
+}
+
+variable "gpu_reservation_id_uc" {
+  description = "Reservation UUID for GPU node in CHI@UC"
+  type        = string
+}
+
+variable "enable_gpu_block_storage" {
+  description = "Whether to attach persistent block storage to the GPU node"
+  type        = bool
+  default     = false
+}
