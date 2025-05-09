@@ -1,7 +1,22 @@
+# ---
+# - name: Create GHCR creds secret
+#   kubernetes.core.k8s:
+#     state: present
+#     definition:
+#       apiVersion: v1
+#       kind: Secret
+#       metadata:
+#         name: ghcr-creds
+#         namespace: argocd
+#         annotations:
+#           argocd-image-updater.argoproj.io/credentials-type: docker
+#       stringData:
+#         username: "{{ ghcr_username }}"
+#         password: "{{ ghcr_pat }}"
+
 ---
-- name: Create GHCR creds secret
+- name: Create GHCR creds for Argo Image Updater
   kubernetes.core.k8s:
-    state: present
     definition:
       apiVersion: v1
       kind: Secret
