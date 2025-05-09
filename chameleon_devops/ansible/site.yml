@@ -1,3 +1,140 @@
+# Persistent Storage Setup (Services Node and GPU Node)
+- hosts: services_nodes,gpu_nodes
+  become: true
+  tasks:
+    - name: Check if /dev/vdb exists
+      stat:
+        path: /dev/vdb
+      register: vdb_stat
+
+    - name: Format /dev/vdb if it exists
+      filesystem:
+        fstype: ext4
+        dev: /dev/vdb
+      when: vdb_stat.stat.exists
+
+    - name: Create /mnt/persistent if /dev/vdb exists
+      file:
+        path: /mnt/persistent
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0775"
+      when: vdb_stat.stat.exists
+
+    - name: Mount /dev/vdb on /mnt/persistent
+      mount:
+        path: /mnt/persistent
+        src: /dev/vdb
+        fstype: ext4
+        state: mounted
+        opts: defaults,nofail
+      when: vdb_stat.stat.exists
+
+# GPU-specific tasks
+- hosts: gpu_nodes
+  become: true
+  vars:
+    project_remote_path: "/home/{{ ansible_user }}/mlops-project"
+  vars_files:
+    - group_vars/all/secrets.yml
+  roles:
+    - docker_install
+    - docker_compose
+    - copy_configs
+    - project
+    - gpu_setup
+  tasks:
+    - name: Deploy Docker Compose stack (gpu)
+      shell: docker compose --profile gpu up -d --remove-orphans
+      args:
+        chdir: "{{ project_remote_path }}"
+      when: "'gpu_nodes' in group_names"
+
+- hosts: services_nodes
+  become: true
+  vars:
+    project_remote_path: "/home/{{ ansible_user }}/mlops-project"
+  tasks:
+    - name: Ensure Prometheus config directory exists
+      file:
+        path: "{{ project_remote_path }}/devops/docker-compose"
+        state: directory
+        mode: '0755'
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Ensure Prometheus configuration file exists
+      copy:
+        dest: "{{ project_remote_path }}/devops/docker-compose/prometheus.yml"
+        content: |
+          global:
+            scrape_interval: 15s
+          scrape_configs:
+            - job_name: 'prometheus'
+              static_configs:
+                - targets: ['localhost:9090']
+
+    - name: Deploy Docker Compose stack (services)
+      shell: docker compose --profile services up -d --remove-orphans
+      args:
+        chdir: "{{ project_remote_path }}"
+      when: "'services_nodes' in group_names"
+
+# Docker Data Migration ONLY for nodes WITH persistent storage
+- hosts: services_nodes,gpu_nodes
+  become: true
+  tasks:
+    - name: Check if persistent mount exists
+      stat:
+        path: /mnt/persistent
+      register: persistent_stat
+
+    - name: Check if Docker data directory exists
+      stat:
+        path: /var/lib/docker
+      register: docker_data_stat
+
+    - name: Stop Docker service if migration is required
+      systemd:
+        name: docker
+        state: stopped
+      when: persistent_stat.stat.exists and docker_data_stat.stat.exists
+
+    - name: Create Docker persistent directory
+      file:
+        path: /mnt/persistent/docker
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: persistent_stat.stat.exists and docker_data_stat.stat.exists
+
+    - name: Move Docker data directory to persistent storage
+      command: rsync -aP /var/lib/docker/ /mnt/persistent/docker/
+      when: persistent_stat.stat.exists and docker_data_stat.stat.exists
+
+    - name: Backup old Docker data directory
+      command: mv /var/lib/docker /var/lib/docker.backup
+      when: persistent_stat.stat.exists and docker_data_stat.stat.exists
+
+    - name: Configure Docker daemon to use persistent storage
+      copy:
+        dest: /etc/docker/daemon.json
+        content: |
+          {
+            "data-root": "/mnt/persistent/docker"
+          }
+      when: persistent_stat.stat.exists
+
+    - name: Restart Docker service
+      systemd:
+        name: docker
+        state: restarted
+        enabled: true
+      when: persistent_stat.stat.exists
+
+# Normal deployment tasks
 - hosts: all
   become: true
   vars:
@@ -6,22 +143,24 @@
     - docker_install
     - docker_compose
     - copy_configs
-    - project  
-    - services
+    - project
+    # - services
+  # tasks:
+  #   - name: Deploy Docker Compose stack
+  #     shell: >
+  #       docker compose up -d
+  #     args:
+  #       chdir: "{{ project_remote_path }}"
 
-- hosts: gpu_nodes
-  become: true
-  roles:
-    - gpu_setup
-    
+# Kubernetes control-plane tasks (unchanged)
 - hosts: k8s_control_plane
   become: true
   vars_files:
-    - group_vars/all/secrets.yml   # this file *is* checked in, but encrypted!
+    - group_vars/all/secrets.yml
   roles:
     - k3s
-    - argocd       # installs ArgoCD (with Helm + Python client + NodePort)
-    - argocd_image_updater # staged deployment
-    - workflows    # drift‑detection, retraining, and ArgoCD App
-    - monitoring   # deploys Prometheus and Grafana
-    - argo_workflows # installs Argo Workflows via Helm
+    - argocd
+    - argocd_image_updater
+    - workflows
+    - monitoring
+    - argo_workflows

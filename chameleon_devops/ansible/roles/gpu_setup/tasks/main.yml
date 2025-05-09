@@ -1,5 +1,66 @@
 ---
 # ansible/roles/gpu_setup/tasks/main.yml
+
+- name: Update apt cache and fix missing packages
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  retries: 3
+  delay: 10
+  register: apt_update
+  until: apt_update is succeeded
+
+- name: Install s3fs package
+  apt:
+    name: s3fs
+    state: present
+  retries: 3
+  delay: 10
+  register: s3fs_result
+  until: s3fs_result is succeeded
+
+
+- name: Create ~/.passwd-s3fs with EC2 credentials
+  copy:
+    dest: /home/{{ ansible_user }}/.passwd-s3fs
+    content: "{{ ec2_access_key }}:{{ ec2_secret_key }}\n"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0600'
+
+- name: Ensure mount point for Swift object store exists
+  file:
+    path: /home/{{ ansible_user }}/swift_s3
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Mount Chameleon Swift object store using s3fs
+  become: true
+  mount:
+    path: /home/{{ ansible_user }}/swift_s3
+    src: "object-store_project4"
+    fstype: fuse.s3fs
+    opts: "url=https://chi.uc.chameleoncloud.org:7480,use_path_request_style,passwd_file=/home/{{ ansible_user }}/.passwd-s3fs,uid={{ ansible_uid | default(1000) }},gid={{ ansible_gid | default(1000) }}"
+    state: mounted
+
+# - name: Add s3fs mount to /etc/fstab for persistence
+#   lineinfile:
+#     path: /etc/fstab
+#     line: >
+#       object-store_project4 /home/{{ ansible_user }}/swift_s3 fuse.s3fs
+#       _netdev,allow_other,url=https://chi.uc.chameleoncloud.org:7480,use_path_request_style,
+#       passwd_file=/home/{{ ansible_user }}/.passwd-s3fs,tlsv1.2,
+#       uid={{ ansible_uid | default(1000) }},gid={{ ansible_gid | default(1000) }} 0 0
+#     create: yes
+
+- name: Add s3fs mount to /etc/fstab
+  lineinfile:
+    path: /etc/fstab
+    line: "object-store_project4 /home/cc/swift_s3 fuse.s3fs _netdev,allow_other,use_path_request_style,url=https://chi.uc.chameleoncloud.org:7480,passwd_file=/home/cc/.passwd-s3fs,uid=cc,gid=cc,nonempty 0 0"
+    create: yes
+
 # Installs NVIDIA Container Toolkit and configures Docker to use the nvidia runtime.
 
 - name: Add NVIDIA Container Toolkit GPG key
@@ -27,9 +88,16 @@
     name: nvidia-container-toolkit
     state: latest
 
-- name: Configure Docker to use the NVIDIA runtime and restart service
-  ansible.builtin.shell: |
-    nvidia-ctk runtime configure --runtime=docker
-    systemctl restart docker
-  args:
-    executable: /bin/bash
+- name: Configure Docker to use the NVIDIA runtime
+  command: nvidia-ctk runtime configure --runtime=docker
+
+- name: Restart Docker (if installed with systemd)
+  systemd:
+    name: docker
+    state: restarted
+  ignore_errors: true
+
+- name: Restart Docker (fallback using service)
+  shell: service docker restart
+  when: ansible_service_mgr != "systemd"
+  ignore_errors: true

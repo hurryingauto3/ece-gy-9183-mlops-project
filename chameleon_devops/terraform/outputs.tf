@@ -8,11 +8,11 @@ output "ssh_command_services_node" {
   value       = "ssh -i ~/.ssh/${openstack_compute_keypair_v2.keypair.name} cc@${openstack_networking_floatingip_v2.fip_services.address}"
 }
 output "gpu_node_ip" {
-  value = openstack_networking_floatingip_v2.fip_gpu.address
+  value = openstack_networking_floatingip_v2.fip_gpu_uc.address
 }
 output "ssh_command_gpu_node" {
   description = "SSH command to connect to the GPU VM using the floating IP"
-  value       = "ssh -i ~/.ssh/${openstack_compute_keypair_v2.keypair.name} cc@${openstack_networking_floatingip_v2.fip_gpu.address}"
+  value       = "ssh -i ~/.ssh/${openstack_compute_keypair_v2.keypair_uc.name} cc@${openstack_networking_floatingip_v2.fip_gpu_uc.address}"
 }
 output "services_private_ip" {
   value = openstack_compute_instance_v2.services_node.network[0].fixed_ip_v4
@@ -30,7 +30,7 @@ output "ansible_inventory" {
     services-node ansible_host=${openstack_networking_floatingip_v2.fip_services.address} ansible_user=cc
 
     [gpu_nodes]
-    gpu-node ansible_host=${openstack_networking_floatingip_v2.fip_gpu.address} ansible_user=cc
+    gpu-node ansible_host=${openstack_networking_floatingip_v2.fip_gpu_uc.address} ansible_user=cc
 
     [k8s_control_plane]
     services-node ansible_host=${openstack_networking_floatingip_v2.fip_services.address} ansible_user=cc
