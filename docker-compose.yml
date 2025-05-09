@@ -172,7 +172,8 @@ services:
     container_name: etl-extract-container
     volumes:
       # - ./local_data:/app/data_lake
-      - /mnt/persistent/data_lake:/app/data_lake  # use persistent storage
+      # - /mnt/persistent/data_lake:/app/data_lake  # use persistent storage
+      - /home/cc/swift_s3:/mnt/swift_store
     # Add this command section:
     command:
       - poetry
