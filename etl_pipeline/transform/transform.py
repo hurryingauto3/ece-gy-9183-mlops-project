@@ -52,6 +52,7 @@ def preprocess_hrrr_all_months(file_paths):
         'Wind Gust (m s**-1)': 'Wind Gust (m/s)',
         'Wind Speed (m s**-1)': 'Wind Speed (m/s)'
     }, inplace=True)
+    df_clean["FIPS"] = df_clean["FIPS"].astype(int).apply(lambda x: f"{x:05d}")
 
     return df_clean
 
@@ -64,25 +65,41 @@ def preprocess_usda_data(path, crop_name):
             "commodity_desc": "Crop Type",
             "year": "Year",
             "state_ansi": "State ANSI",
-            "county_ansi": "County ANSI",
-            "YIELD, MEASURED IN LB / ACRE": "Yield (lb/acre)"
+            "county_ansi": "County ANSI"
         }, inplace=True)
 
         crop_key = commodity_map.get(crop_name, crop_name).lower()
         df_filtered = df[df["Crop Type"].str.lower() == crop_key]
+
+        # Try to find yield column dynamically
+        yield_col = None
+        for col in df_filtered.columns:
+            if "yield" in col.lower() and "acre" in col.lower():
+                yield_col = col
+                break
+
+        if not yield_col:
+            logger.error(f"Yield column not found in file: {path}")
+            logger.error(f"Available columns: {list(df_filtered.columns)}")
+            return {}
+
+        # Normalize column name
+        df_filtered.rename(columns={yield_col: "Yield"}, inplace=True)
 
         yield_by_fips = defaultdict(list)
         for _, row in df_filtered.iterrows():
             fips = f"{int(row['State ANSI']):02d}{int(row['County ANSI']):03d}"
             yield_by_fips[fips].append({
                 "year": int(row["Year"]),
-                "yield": row["Yield (lb/acre)"]
+                "yield": row["Yield"]
             })
 
         return yield_by_fips
+
     except Exception as e:
         logger.error(f"Error preprocessing USDA data at {path}: {e}")
         return {}
+
 
 # --- Save Weather ---
 def save_weather_data(df, fips_code, year):
@@ -146,6 +163,7 @@ def process_usda_data():
                 yield_by_fips = preprocess_usda_data(file, crop)
                 for fips_code, records in yield_by_fips.items():
                     save_crop_yield(fips_code, crop, records)
+
 
 # --- Main Orchestration ---
 def main():
