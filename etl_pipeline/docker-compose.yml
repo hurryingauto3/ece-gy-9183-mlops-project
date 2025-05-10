@@ -42,8 +42,7 @@ services:
     volumes:
       # - ./local_data:/app/data_lake  # Fetch data from local VM storage
       # - persistent_data:/mnt/project4/data
-      - /mnt/persistent/data_lake:/app/data_lake
-      - /mnt/persistent/project4/data:/mnt/project4/data
+      - /home/cc/swift_s3:/mnt/swift_store
     # Add this command section:
     command:
       - poetry

@@ -8,7 +8,7 @@ import shutil
 from datetime import timedelta
 import gdown
 
-output_dir = "/app/data_lake"
+output_dir = "/mnt/swift_store/raw_data"
 
 # Ensure dependencies are available - this check is more for local dev/testing
 try:
@@ -39,7 +39,7 @@ def parse_args():
     # Accept multiple folder IDs (space-separated)
     p.add_argument("folder_ids", nargs='+', help="Google Drive root folder IDs (from the URL)")
     # Default output dir inside the VM. Files will be downloaded here temporarily.
-    p.add_argument("-o", "--output", default="/app/data_lake", help="Temporary local directory for downloads (inside VM)")
+    p.add_argument("-o", "--output", default="/mnt/swift_store/raw_data", help="Temporary local directory for downloads (inside VM)")
     p.add_argument("-q", "--quiet", action="store_true", help="Suppress gdown progress bars")
     p.add_argument("--no-cookies", action="store_false", dest="use_cookies",
                    help="Disable cookies for gdown (for public folders)")

@@ -3,149 +3,156 @@ import json
 import pandas as pd
 from pathlib import Path
 import logging
-from openstack import connection
+from collections import defaultdict
 
-# Setup logger
+# --- Logging setup ---
 logger = logging.getLogger("data_processing_pipeline")
 logger.setLevel(logging.INFO)
-console_handler = logging.StreamHandler()
-logger.addHandler(console_handler)
+logger.addHandler(logging.StreamHandler())
 
-# Block Storage Directory Path (Mounted block storage path)
-block_storage_dir = "/mnt/project4/data"  # Adjust this to the correct mounted block storage path
+# --- Directory paths ---
+raw_data_root = "/mnt/swift_store/raw_data"
+transformed_data_root = "/mnt/swift_store/transformed_data"
 
-# VM Temporary Directory for Local Downloads
-temp_download_dir = "/app/data_lake"  # Same as extract.py's default
+# --- Supported crops ---
+crops = ["Corn", "Soybeans", "Cotton", "WinterWheat"]
+commodity_map = {"WinterWheat": "Wheat"}  # USDA uses 'Wheat' for WinterWheat
 
-# Ensure the temporary download directory exists
-Path(temp_download_dir).mkdir(parents=True, exist_ok=True)
+Path(transformed_data_root).mkdir(parents=True, exist_ok=True)
 
-# Swift Connection Setup (we'll use it only if needed)
-def connect_to_swift():
-    conn = connection.Connection(
-        auth_url=os.getenv("OS_AUTH_URL"),
-        project_name=os.getenv("OS_PROJECT_NAME"),
-        username=os.getenv("OS_USERNAME"),
-        password=os.getenv("OS_PASSWORD"),
-        region_name=os.getenv("OS_REGION_NAME"),
-        user_domain_name=os.getenv("OS_USER_DOMAIN_NAME"),
-        project_domain_name=os.getenv("OS_PROJECT_DOMAIN_NAME")
-    )
-    return conn
+# --- Preprocess HRRR Weather Files ---
+def preprocess_hrrr_all_months(file_paths):
+    dfs = []
+    for path in file_paths:
+        try:
+            df = pd.read_csv(path)
+            dfs.append(df)
+        except Exception as e:
+            logger.error(f"Failed to read HRRR file {path}: {e}")
 
-# Preprocess HRRR weather data
-def preprocess_hrrr_data(weather_data_path):
-    """Preprocess HRRR weather data (remove missing values, handle columns)."""
+    if not dfs:
+        return None
+
+    df_all = pd.concat(dfs, ignore_index=True)
+
+    df_clean = df_all[[
+        'Year', 'Month', 'Day', 'State', 'County', 'FIPS Code',
+        'Avg Temperature (K)', 'Max Temperature (K)', 'Min Temperature (K)',
+        'Precipitation (kg m**-2)', 'Relative Humidity (%)',
+        'Wind Gust (m s**-1)', 'Wind Speed (m s**-1)'
+    ]].dropna()
+
+    df_clean.rename(columns={
+        'FIPS Code': 'FIPS',
+        'Avg Temperature (K)': 'Avg Temp (K)',
+        'Max Temperature (K)': 'Max Temp (K)',
+        'Min Temperature (K)': 'Min Temp (K)',
+        'Precipitation (kg m**-2)': 'Precip (kg/m²)',
+        'Relative Humidity (%)': 'Humidity (%)',
+        'Wind Gust (m s**-1)': 'Wind Gust (m/s)',
+        'Wind Speed (m s**-1)': 'Wind Speed (m/s)'
+    }, inplace=True)
+
+    return df_clean
+
+# --- Preprocess USDA Yield Files ---
+def preprocess_usda_data(path, crop_name):
     try:
-        df = pd.read_csv(weather_data_path)
-        # Filter only relevant columns (e.g., weather variables)
-        df_cleaned = df[['Year', 'Month', 'Day', 'State', 'County', 'FIPS Code', 
-                         'Avg Temperature (K)', 'Max Temperature (K)', 'Min Temperature (K)', 
-                         'Precipitation (kg m**-2)', 'Relative Humidity (%)', 'Wind Gust (m s**-1)', 
-                         'Wind Speed (m s**-1)']]
-        df_cleaned.dropna(inplace=True)  # Drop rows with missing values
-        return df_cleaned
-    except Exception as e:
-        logger.error(f"Error preprocessing HRRR data: {e}")
-        raise
+        df = pd.read_csv(path)
 
-# Preprocess USDA crop yield data
-def preprocess_usda_data(crop_data_path):
-    """Preprocess USDA crop yield data and return a dictionary with crop types."""
-    try:
-        df = pd.read_csv(crop_data_path)
-        # Filter relevant columns (state, county, crop yield, etc.)
-        df_filtered = df[['year', 'state_ansi', 'county_ansi', 'commodity_desc', 
-                          'PRODUCTION, MEASURED IN 480 LB BALES', 'YIELD, MEASURED IN LB / ACRE']]
+        df.rename(columns={
+            "commodity_desc": "Crop Type",
+            "year": "Year",
+            "state_ansi": "State ANSI",
+            "county_ansi": "County ANSI",
+            "YIELD, MEASURED IN LB / ACRE": "Yield (lb/acre)"
+        }, inplace=True)
 
-        # Create a dictionary to map FIPS codes to yield data, categorized by crop type
-        yield_data_by_fips = {}
+        crop_key = commodity_map.get(crop_name, crop_name).lower()
+        df_filtered = df[df["Crop Type"].str.lower() == crop_key]
 
-        # Generate FIPS code by combining state_ansi and county_ansi
+        yield_by_fips = defaultdict(list)
         for _, row in df_filtered.iterrows():
-            state_ansi = row['state_ansi']
-            county_ansi = row['county_ansi']
-            crop = row['commodity_desc'].lower()
-
-            # Combine state_ansi and county_ansi to get FIPS code (state_ansi + county_ansi)
-            fips_code = f"{int(state_ansi):02d}{int(county_ansi):03d}"
-
-            if fips_code not in yield_data_by_fips:
-                yield_data_by_fips[fips_code] = {}
-
-            if crop not in yield_data_by_fips[fips_code]:
-                yield_data_by_fips[fips_code][crop] = []
-
-            yield_data_by_fips[fips_code][crop].append({
-                'year': row['year'],
-                'yield': row['YIELD, MEASURED IN LB / ACRE']
+            fips = f"{int(row['State ANSI']):02d}{int(row['County ANSI']):03d}"
+            yield_by_fips[fips].append({
+                "year": int(row["Year"]),
+                "yield": row["Yield (lb/acre)"]
             })
 
-        return yield_data_by_fips
+        return yield_by_fips
     except Exception as e:
-        logger.error(f"Error preprocessing USDA data: {e}")
-        raise
+        logger.error(f"Error preprocessing USDA data at {path}: {e}")
+        return {}
 
-# Save HRRR data by FIPS code
-def save_weather_data_by_fips(weather_df, fips_code):
-    """Save the preprocessed weather data to block storage based on FIPS code."""
-    # Save data per FIPS per year
-    for year in weather_df['Year'].unique():
-        year_df = weather_df[weather_df['Year'] == year]
-        year_dir = Path(block_storage_dir) / f"{fips_code}" / f"{year}"
-        year_dir.mkdir(parents=True, exist_ok=True)
-        weather_file_path = year_dir / f"WeatherTimeSeries{year}.csv"
-        year_df.to_csv(weather_file_path, index=False)
-        logger.info(f"Weather data for FIPS {fips_code} and year {year} saved to {weather_file_path}")
+# --- Save Weather ---
+def save_weather_data(df, fips_code, year):
+    out_dir = Path(transformed_data_root) / fips_code / str(year)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"WeatherTimeSeries{year}.csv"
+    df.to_csv(out_path, index=False)
+    logger.info(f"Saved weather data: {out_path}")
 
-# Save crop yield data to block storage
-def save_crop_yield_to_block_storage(fips_code, crop_data_by_fips):
-    """Save the preprocessed crop yield data to block storage."""
-    for crop, yield_data in crop_data_by_fips[fips_code].items():
-        crop_file_path = Path(block_storage_dir) / f"{fips_code}" / f"{crop}.json"
-        with open(crop_file_path, 'w') as f:
-            json.dump(yield_data, f)
-        logger.info(f"Crop yield data for '{crop}' saved to {crop_file_path}")
+# --- Save Crop Yield ---
+def save_crop_yield(fips_code, crop, records):
+    out_dir = Path(transformed_data_root) / fips_code
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{crop.lower()}.json"
+    with open(out_path, "w") as f:
+        json.dump(records, f, indent=2)
+    logger.info(f"Saved yield data: {out_path}")
 
-# Main function to orchestrate data processing
-def process_and_store_data():
-    logger.info("Processing HRRR and USDA data from local VM storage...")
+# --- HRRR Processor ---
+def process_weather_data():
+    hrrr_base = Path(raw_data_root) / "HRRR" / "data"
+    if not hrrr_base.exists():
+        logger.warning("No HRRR data found.")
+        return
 
-    available_fips_codes = set()
+    for year_dir in hrrr_base.iterdir():
+        if not year_dir.is_dir():
+            continue
+        year = year_dir.name
+        for state_dir in year_dir.iterdir():
+            if not state_dir.is_dir():
+                continue
+            csv_files = list(state_dir.glob("*.csv"))
+            if not csv_files:
+                continue
 
-    # Loop through the temp download directory to list the available files for HRRR and USDA
-    for root, dirs, files in os.walk(temp_download_dir):
-        for file in files:
-            if file.endswith("weather.csv"):  # Filter weather data files
-                # Extract year, state, and FIPS info from the file path (assuming the format 'state_year_weather.csv')
-                path_parts = root.split(os.sep)
-                if len(path_parts) >= 2:
-                    state = path_parts[-2]
-                    year = path_parts[-1].split("_")[1]
-                    fips_code = pd.read_csv(os.path.join(root, file))['FIPS Code'].iloc[0]  # Read FIPS code from the HRRR file
-                    available_fips_codes.add(fips_code)
+            logger.info(f"Processing HRRR: Year={year}, State={state_dir.name}")
+            df = preprocess_hrrr_all_months(csv_files)
+            if df is None:
+                continue
 
-            elif file.endswith("yield.csv"):  # Filter USDA data files
-                # Extract year, state, and county ANSI codes from the USDA file
-                crop_local_path = os.path.join(root, file)
-                yield_data_by_fips = preprocess_usda_data(crop_local_path)
-                
-                for fips_code in yield_data_by_fips:
-                    # Process the USDA data for the FIPS code and store in block storage
-                    save_crop_yield_to_block_storage(fips_code, yield_data_by_fips)
+            for fips_code in df["FIPS"].unique():
+                fips_df = df[df["FIPS"] == fips_code]
+                save_weather_data(fips_df, str(fips_code), year)
 
-    # Process each available FIPS code for weather data
-    for fips_code in available_fips_codes:
-        try:
-            # Process HRRR weather data for the FIPS code
-            weather_local_path = os.path.join(temp_download_dir, f"{state}_{year}_weather.csv")
-            weather_df = preprocess_hrrr_data(weather_local_path)
-            save_weather_data_by_fips(weather_df, fips_code)
-        except Exception as e:
-            logger.error(f"Error processing HRRR data for FIPS code {fips_code}: {e}")
+# --- USDA Processor ---
+def process_usda_data():
+    usda_base = Path(raw_data_root) / "USDA" / "data"
+    if not usda_base.exists():
+        logger.warning("No USDA data found.")
+        return
 
-    logger.info("Data processing finished.")
+    for crop in crops:
+        crop_dir = usda_base / crop
+        if not crop_dir.exists():
+            continue
+        for year_dir in crop_dir.iterdir():
+            if not year_dir.is_dir():
+                continue
+            for file in year_dir.glob("*.csv"):
+                yield_by_fips = preprocess_usda_data(file, crop)
+                for fips_code, records in yield_by_fips.items():
+                    save_crop_yield(fips_code, crop, records)
 
-# Run the data processing pipeline
+# --- Main Orchestration ---
+def main():
+    logger.info("=== Transform Pipeline Start ===")
+    process_weather_data()
+    process_usda_data()
+    logger.info("=== Transform Pipeline Complete ===")
+
 if __name__ == "__main__":
-    process_and_store_data()
+    main()
