@@ -20,6 +20,7 @@ commodity_map = {"WinterWheat": "Wheat"}  # USDA uses 'Wheat' for WinterWheat
 
 Path(transformed_data_root).mkdir(parents=True, exist_ok=True)
 
+
 # --- Preprocess HRRR Weather Files ---
 def preprocess_hrrr_all_months(file_paths):
     dfs = []
@@ -110,13 +111,30 @@ def save_weather_data(df, fips_code, year):
     logger.info(f"Saved weather data: {out_path}")
 
 # --- Save Crop Yield ---
-def save_crop_yield(fips_code, crop, records):
+def save_crop_yield(fips_code, crop, new_records):
     out_dir = Path(transformed_data_root) / fips_code
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{crop.lower()}.json"
+
+    existing = []
+    if out_path.exists():
+        try:
+            with open(out_path, "r") as f:
+                existing = json.load(f)
+        except Exception as e:
+            logger.warning(f"Could not read existing file {out_path}: {e}")
+
+    # Merge and deduplicate by year
+    all_records = {r["year"]: r for r in existing}
+    for r in new_records:
+        all_records[r["year"]] = r  # This will update or add
+
+    merged_records = sorted(all_records.values(), key=lambda x: x["year"])
+
     with open(out_path, "w") as f:
-        json.dump(records, f, indent=2)
-    logger.info(f"Saved yield data: {out_path}")
+        json.dump(merged_records, f, indent=2)
+
+    logger.info(f"Updated yield data: {out_path}")
 
 # --- HRRR Processor ---
 def process_weather_data():
