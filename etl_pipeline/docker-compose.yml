@@ -13,7 +13,7 @@ services:
       - poetry
       - run
       - python # Or /usr/local/bin/python3 depending on your base image/install
-      - /app/drive_to_swift_etl.py # Path to your script inside the container
+      - /app/extract.py # Path to your script inside the container
       - ${GOOGLE_DRIVE_FOLDER_ID_HRRR} # Positional argument folder_id
       - ${GOOGLE_DRIVE_FOLDER_ID_USDA} 
       # - --swift-container # Named argument flag
