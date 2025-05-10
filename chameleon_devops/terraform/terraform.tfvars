@@ -33,7 +33,7 @@ enable_staging      = false
 
 gpu_reservation_id = "d97ab437-5cab-47a6-99dc-001ba9822c18"
 
-# gpu_image_id_uc = "45661d6e-d442-48b2-892f-e39a246011cc"
+gpu_image_id_uc = "45661d6e-d442-48b2-892f-e39a246011cc"
 # gpu_reservation_id_uc = "d97ab437-5cab-47a6-99dc-001ba9822c18"
 # gpu_reservation_id_uc = "1def9c07-1eda-44fc-9564-dae33761ba88"
 
