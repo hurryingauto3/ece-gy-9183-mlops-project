@@ -7,6 +7,8 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 # Import run_in_threadpool to handle synchronous I/O in an async endpoint
 from starlette.concurrency import run_in_threadpool
+from datetime import date # Import date for type hinting
+from typing import Optional
 
 from .config import settings
 # Import the data loading function and connection management functions
@@ -142,20 +144,24 @@ async def global_exception_handler(request, exc):
 @app.get(
     "/features",
     response_model=FeaturesResponse,
-    summary="Get weather features for a county and year",
-    description="Retrieves daily weather data for the April-October season for the specified county (FIPS) and year from OpenStack Swift."
+    summary="Get weather features for a county and year, optionally up to a cut-off date and for a specific crop",
+    description="Retrieves daily weather data for the April-October season (or up to cut_off_date) for the specified county (FIPS) and year from OpenStack Swift. Crop parameter is a placeholder for future extension."
 )
-async def get_features(county: str, year: int):
+async def get_features(county: str, year: int, cut_off_date: Optional[date] = None, crop: Optional[str] = None):
     """
-    Fetches weather data from OpenStack Swift for the April-October season.
+    Fetches weather data from OpenStack Swift, optionally applying a cut-off date and considering crop type.
     """
-    structlog.contextvars.bind_contextvars(fips_code=county, year=year)
+    structlog.contextvars.bind_contextvars(fips_code=county, year=year, cut_off_date=str(cut_off_date) if cut_off_date else None, crop=crop)
     logger.info("Received request for features")
+
+    # Convert date to string if provided, as data_loader expects string or None
+    cut_off_date_str = cut_off_date.isoformat() if cut_off_date else None
 
     try:
         # --- Use run_in_threadpool for the blocking I/O call ---
-        # load_and_process_weather_features is synchronous, so run it in a thread
-        weather_data = await run_in_threadpool(load_and_process_weather_features, county, year)
+        weather_data = await run_in_threadpool(
+            load_and_process_weather_features, county, year, cut_off_date_str, crop
+        )
         # -----------------------------------------------------
 
         if weather_data is None:

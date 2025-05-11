@@ -1,62 +1,71 @@
-# Stage 1: Builder
-FROM python:3.10-slim AS builder
+FROM python:3.11.9
 
-# Install poetry
-ENV POETRY_VERSION=1.7.1
-RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
-
-WORKDIR /build
-
-# Copy only files needed for dependency installation
-COPY pyproject.toml poetry.lock* /build/
-
-# Install dependencies and export requirements
-# --without dev: Exclude development dependencies like pytest from the export
-# --output: Specify the output file name
-# --without-hashes: Improves compatibility sometimes, consider if needed
-RUN poetry export --without dev --format requirements.txt --output requirements.txt
-
-# Stage 2: Runtime
-FROM python:3.10-slim
-
-# Create a non-root user and group
-ARG USER=appuser
-ARG GROUP=appgroup
-ARG UID=1001
-ARG GID=1001
-RUN groupadd -g ${GID} ${GROUP} && \
-    useradd -u ${UID} -g ${GROUP} -m -s /bin/bash ${USER}
-
+# Set working directory
 WORKDIR /app
 
-# Copy exported requirements from builder stage
-COPY --from=builder /build/requirements.txt /app/requirements.txt
+# Python environment settings
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-# Install runtime dependencies
-RUN pip install --no-cache-dir -r /app/requirements.txt
+# Poetry setup
+ENV POETRY_VERSION=1.7.1 \
+    POETRY_HOME="/opt/poetry" \
+    POETRY_VIRTUALENVS_CREATE=false \
+    PATH="/opt/poetry/bin:$PATH"
 
-# Copy application code from build context
-COPY . /app/model_serving
+RUN apt-get update || true \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        git \
+        libffi-dev \
+        libssl-dev \
+        build-essential \
+        gfortran \
+        gnupg \
+        ca-certificates \
+    && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 0xA1BCB2D2 || true \
+    && rm -rf /var/lib/apt/lists/* # Clean up apt cache
 
-# Set environment variables
-ENV MLFLOW_TRACKING_URI=""
-ENV FEATURE_SERVICE_URL=""
-# Ensure this is passed during docker run
-ENV PYTHONPATH=/app
-# Add environment variable for number of workers (default to 2 if not set)
-# ENV UVICORN_WORKERS=${UVICORN_WORKERS:-2}
+# Install Poetry globally, specifying a version that supports package-mode (>=1.5.0)
+RUN curl -sSL https://install.python-poetry.org | POETRY_HOME=/opt/poetry python - --version 2.1.1
+COPY model_serving/pyproject.toml model_serving/poetry.lock ./
+RUN poetry install --no-interaction --no-ansi --no-root
 
-# Change ownership of the app directory
-RUN chown -R ${USER}:${GROUP} /app
+# --- Additions for dummy asset generation ---
+# Create a dedicated directory for the asset generation script and its model definition dependency
+RUN mkdir -p /app/asset_generator_tools
 
-# Switch to non-root user
-USER ${USER}
+# Copy the specific model definitions file needed by the generation script
+# This should be the model.py that ONLY contains class definitions, not training scripts.
+COPY ../model_training/model.py /app/asset_generator_tools/model.py
 
+# Copy the asset generation script (which now uses "from model import ...")
+COPY ../model_training/generate_dummy_assets.py /app/asset_generator_tools/generate_assets.py
+
+# Ensure the target directory for generated assets exists 
+# (This is where the generate_assets.py script will write to)
+RUN mkdir -p /app/dummy_assets && chmod 755 /app/dummy_assets
+# --- End Additions ---
+
+# Copy the rest of the model_serving application code
+# This should only copy the model_serving specific files.
+# Assuming your Dockerfile is in model_serving/ and context is the project root (.) 
+# you might want to be more specific to avoid copying unnecessary parent directories.
+# For now, if context is '.', COPY . . copies everything. 
+# If context for this Dockerfile was model_serving/, then COPY . . would copy model_serving contents.
+# Given docker-compose.dummy.yml uses context: ., the COPY . . copies the whole project. 
+# This is a general Docker best practice point, but for now, the above specific copies should isolate the asset generation.
+COPY . .
+
+# Copy and set permissions for the entrypoint script
+COPY ../model_serving/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+# Expose the port the app runs on
 EXPOSE 8000
 
-# Adjust the CMD to point to the app within the model_serving directory
-# Use the $UVICORN_WORKERS environment variable
-CMD ["uvicorn", "model_serving.app:app", "--host", "0.0.0.0", "--port", "8000"]
+# Set the entrypoint
+ENTRYPOINT ["/app/entrypoint.sh"]
 
-
-#  "--workers", "${UVICORN_WORKERS}"]
+# Set the default command to run the application (will be passed to entrypoint.sh)
+CMD ["uvicorn", "model_serving.app:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"]
