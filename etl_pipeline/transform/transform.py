@@ -39,7 +39,7 @@ def preprocess_hrrr_all_months(file_paths):
     df_all = pd.concat(dfs, ignore_index=True)
 
     df_clean = df_all[[
-        'Year', 'Month', 'Day', 'State', 'County', 'FIPS Code',
+        'Year', 'Month', 'Day', 'FIPS Code',
         'Avg Temperature (K)', 'Max Temperature (K)', 'Min Temperature (K)',
         'Precipitation (kg m**-2)', 'Relative Humidity (%)',
         'Wind Gust (m s**-1)', 'Wind Speed (m s**-1)'
