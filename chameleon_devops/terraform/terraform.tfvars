@@ -2,7 +2,7 @@
 
 # gpu_site = "chi_tacc" # or "chi_uc"
 gpu_site = "chi_uc" # or "chi_tacc"
-cloud = "kvm"
+cloud    = "kvm"
 
 cloud_kvm       = "kvm"
 services_region = "KVM@TACC"
@@ -41,6 +41,6 @@ gpu_image_id_tacc = "fab0dfeb-52d7-46fd-9398-613daf8e63c0"
 # gpu_reservation_id_uc = "d97ab437-5cab-47a6-99dc-001ba9822c18"
 # gpu_reservation_id_uc = "1def9c07-1eda-44fc-9564-dae33761ba88"
 # gpu_reservation_id_uc = "dfac712e-3045-4a19-ad2c-7ff0a0ba8d45"
-gpu_reservation_id_uc = "323712db-e65b-47dd-bf48-3df29532959a"
+gpu_reservation_id_uc   = "323712db-e65b-47dd-bf48-3df29532959a"
 gpu_reservation_id_tacc = "1e1edcc2-7276-4201-a5d4-408ddb6f850a"
 private_net_chi_id      = "c95788a7-75fd-422d-91af-8bd31704f03f"

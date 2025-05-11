@@ -173,10 +173,10 @@ resource "openstack_compute_instance_v2" "services_node" {
 #    (use existing network to avoid stale-ID errors)
 # ──────────────────────────────────────────
 resource "openstack_networking_network_v2" "private_net_chi" {
-  provider               = openstack.chi
-  name                   = "${var.network_name}-chi"
-  admin_state_up         = true
-  port_security_enabled  = false
+  provider              = openstack.chi
+  name                  = "${var.network_name}-chi"
+  admin_state_up        = true
+  port_security_enabled = false
 }
 
 resource "openstack_networking_subnet_v2" "private_subnet_chi" {
