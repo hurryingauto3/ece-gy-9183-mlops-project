@@ -28,8 +28,7 @@ def process_fips_crop(fips_code: str,
 
     os.makedirs(output_dir, exist_ok=True)
     prefix = f"{fips_code}/"
-    objs = list(conn.object_store.objects(
-        container=container, prefix=prefix))
+    objs = list(conn.object_store.objects(container=container, prefix=prefix))
 
     # 1) load yields
     json_path = f"{fips_code}/{crop_name.lower()}.json"
@@ -54,25 +53,20 @@ def process_fips_crop(fips_code: str,
             if df.empty:
                 continue
             df["Yield"] = yield_map[yr]
-            df["FIPS Code"] = fips_code                          # <<< add this!
+            df["FIPS Code"] = fips_code
             frames[yr] = df
 
-    if not frames:
-        raise ValueError("No data found for any year.")
+    if len(frames) < 3:
+        raise ValueError("Need at least 3 years of data to create train/eval/test split.")
 
     yrs = sorted(frames.keys())
-    
-    if len(yrs) < 3:
-        raise ValueError("Need at least 3 years of data to split into train, eval, and test.")
-
-    latest = yrs[-1]
-    eval_year = yrs[-2]
     train_years = yrs[:-2]
+    eval_year = yrs[-2]
+    test_year = yrs[-1]
 
     df_train = pd.concat([frames[y] for y in train_years], ignore_index=True)
     df_eval  = frames[eval_year]
-    df_test  = frames[latest]
-
+    df_test  = frames[test_year]
 
     base = f"{fips_code}_{crop_name.lower()}"
     df_train.to_csv(f"{output_dir}/{base}_training_data.csv", index=False)
@@ -82,7 +76,6 @@ def process_fips_crop(fips_code: str,
     print(f"[OK] wrote training_data.csv")
     print(f"[OK] wrote eval_data.csv")
     print(f"[OK] wrote testing_data.csv")
-
 
 if __name__=="__main__":
     import argparse
