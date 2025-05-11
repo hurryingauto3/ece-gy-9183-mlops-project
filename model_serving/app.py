@@ -13,8 +13,8 @@ from fastapi import (
     Depends,
 )
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, field_validator, HttpUrl, Field
 from typing import List, Dict, Any, Optional
+from datetime import date # Import date
 
 # Import modules needed by the app
 # Note: Ensure 'torch' is implicitly handled by predict.py or dependencies
@@ -22,9 +22,11 @@ from model_serving.predict import predict_yield, predict_yield_batch, async_clie
 # Consolidate imports from mlflow_loader
 from model_serving.mlflow_loader import (
     get_model_and_mapping, # This is the async dependency function
-    settings, # Global settings instance
+    get_app_settings, # ADDED: For startup and /model_info
+    # settings, # settings is loaded via get_app_settings now
     ModelServingBaseError, # Custom exception
     ConfigurationError,  # Custom exception
+    AppSettings, # <--- ADD THIS IMPORT
     # No need to import get_model_and_mapping or settings from .mlflow_loader again
 )
 from model_serving.drift import check_data_drift, log_prediction_for_monitoring
@@ -46,6 +48,16 @@ from model_serving.exceptions import (
     InvalidModelInputError,
     InvalidModelOutputError,
     ModelInferenceError,
+)
+
+# Import schemas
+from .schemas import (
+    PredictionRequest,
+    BatchPredictionRequest,
+    BatchPredictionResponseItem,
+    BatchPredictionResponse,
+    HealthResponse,
+    ModelInfoResponse
 )
 
 # --- Configure Structured Logging ---
@@ -86,11 +98,29 @@ logger = structlog.get_logger(__name__)
 # Use a default if settings failed to load, or handle error appropriately
 default_limit = "10/minute" # Single prediction default
 default_batch_limit = "5/minute" # Batch prediction default
+
+# MODIFIED: Stripped down for extreme debugging of the call signature
+def get_dynamic_predict_limit(request: Request) -> str:
+    print(f"!!! DEBUG: get_dynamic_predict_limit CALLED. Request type: {type(request)}")
+    logger.info(f"!!! DEBUG: get_dynamic_predict_limit CALLED. Request type: {type(request)}")
+    # Directly return default_limit to avoid any other potential errors within this function
+    return default_limit
+
+# MODIFIED: Stripped down for extreme debugging of the call signature
+def get_dynamic_predict_batch_limit(request: Request) -> str:
+    print(f"!!! DEBUG: get_dynamic_predict_batch_limit CALLED. Request type: {type(request)}")
+    logger.info(f"!!! DEBUG: get_dynamic_predict_batch_limit CALLED. Request type: {type(request)}")
+    # Directly return default_batch_limit to avoid any other potential errors within this function
+    return default_batch_limit
+
 limiter = Limiter(
     key_func=get_remote_address,
     # We don't set a default_limits list here, but apply limits per endpoint using @limiter.limit
     # Using enabled=settings is not None will prevent errors if settings load fails
-    enabled=settings is not None
+    # This should be enabled=True and rely on get_app_settings to fail first if config is bad.
+    # However, if settings object itself is None at this point of definition, it may error.
+    # Safest is to initialize Limiter and then check settings inside the lambda for limits.
+    enabled=True # Rate limiting should be enabled by default
 )
 # ---------------------------------------------
 
@@ -118,10 +148,8 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # Apply SlowAPIMiddleware
-if settings is not None: # Only add middleware if settings loaded successfully
-    app.add_middleware(SlowAPIMiddleware)
-else:
-    logger.warning("Settings failed to load, Rate Limiting middleware will be skipped.")
+# We will ensure settings are loaded by get_app_settings at startup or first request.
+app.add_middleware(SlowAPIMiddleware)
 # ----------------------------------------------------
 
 # --- Add Prometheus Metrics ---
@@ -158,287 +186,134 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-# --- Pydantic Models with Examples ---
-class PredictionRequest(BaseModel):
-    county: str = Field(..., example="TestCounty", description="Name of the county.")
-    year: int = Field(
-        ..., example=2023, description="Year for the prediction (e.g., 1980-2050)."
-    )
-
-    @field_validator("year")
-    def year_must_be_reasonable(cls, v):
-        if not (1980 <= v <= 2050):  # Example range, adjust as needed
-            raise ValueError("Year must be between 1980 and 2050")
-        return v
-
-    @field_validator("county")
-    def county_must_not_be_empty(cls, v):
-        if not v or v.isspace():
-            raise ValueError("County cannot be empty")
-        # Add more specific county validation if a list of valid counties exists
-        return v.strip()
-
-
-class BatchPredictionRequest(BaseModel):
-    requests: List[PredictionRequest] = Field(
-        ..., min_length=1, description="A list of prediction requests."
-    )
-
-
-class BatchPredictionResponseItem(BaseModel):
-    county: str = Field(
-        ..., example="TestCounty", description="Name of the county from the request."
-    )
-    year: int = Field(..., example=2023, description="Year from the request.")
-    predicted_yield: Optional[float] = Field(
-        None, example=45.67, description="Predicted yield value, if successful."
-    )
-    error: Optional[str] = Field(
-        None,
-        example="Features not found",
-        description="Error message, if prediction failed for this item.",
-    )
-
-
-class BatchPredictionResponse(BaseModel):
-    responses: List[BatchPredictionResponseItem] = Field(
-        ..., description="List of results corresponding to the batch requests."
-    )
-
-
-class HealthResponse(BaseModel):
-    status: str = Field(..., example="ok")
-
-
-class ModelInfoResponse(BaseModel):
-    model_name: str = Field(..., example="AgriYieldPredictor")
-    model_stage: str = Field(..., example="Production")
-    mlflow_uri: str = Field(..., example="http://mlflow.example.com")
-    # Add model_version if tracked in mlflow_loader
-    # model_version: str = Field(..., example="1")
-
-
 # --- API Endpoints with Tags and Descriptions ---
 
 
 @app.post(
     "/predict",
     tags=["Predictions"],
-    summary="Get a single yield prediction",
-    description="Fetch features and predict yield for a single county and year.",
-    response_description="The prediction result or error information.",
+    summary="Get a single yield histogram prediction",
+    description="Fetch features up to a cut-off date for a specific crop and predict yield histogram for a county and year.",
+    response_description="The histogram prediction result or error information.",
 )
-@limiter.limit(
-    lambda: settings.api.predict_limit if settings else default_limit
-)
+# @limiter.limit(
+#     get_dynamic_predict_limit  # Use the new async helper function
+# )
 async def get_prediction(
     request: Request, # Passed by SlowAPI middleware
     req: PredictionRequest = Body(
-        ..., example={"county": "SampleCounty", "year": 2024}
+        ..., 
+        example=PredictionRequest(
+            county="19153", 
+            year=2023, 
+            cut_off_date="2023-08-01", 
+            crop="corn", 
+            histogram_bins=[0, 50, 100, 150, 200, 250]
+        ).model_dump()
     ),
-    # CORRECT: Pass the callable function name
-    model_tuple=Depends(get_model_and_mapping),
+    model_data=Depends(get_model_and_mapping), # Renamed for clarity: model, fips_map, crop_map
 ):
-    # Unpack the model and mapping from the dependency result
-    model, fips_mapping = model_tuple
+    model, fips_mapping, crop_mapping = model_data # Unpack all three
 
-    structlog.contextvars.bind_contextvars(county=req.county, year=req.year)
-    prediction_result = None
+    structlog.contextvars.bind_contextvars(county=req.county, year=req.year, crop=req.crop, cut_off_date=req.cut_off_date)
+    prediction_output = None
     error_message = None
+    status_code = status.HTTP_200_OK
+
     try:
-        # check_data_drift(req.model_dump()) # Data drift check needs to be robust (handle potentially empty features)
-        logger.info("Starting prediction")
-        # Pass the fips_mapping to predict_yield
-        prediction_result = await predict_yield(
-            model, fips_mapping, req.county, req.year
+        logger.info("Starting histogram prediction")
+        # predict_yield will now return a dict for the histogram
+        histogram_data = await predict_yield(
+            model=model,
+            fips_mapping=fips_mapping,
+            crop_mapping=crop_mapping, # Pass crop_mapping
+            county=req.county,
+            year=req.year,
+            cut_off_date=req.cut_off_date,
+            crop_name=req.crop, # Pass crop name
+            histogram_bins=req.histogram_bins # Pass histogram_bins
         )
-        logger.info("Prediction successful", predicted_yield=prediction_result)
+        prediction_output = BatchPredictionResponseItem(
+            county=req.county,
+            year=req.year,
+            cut_off_date=req.cut_off_date,
+            crop=req.crop,
+            predicted_histogram=histogram_data,
+            error=None
+        )
+        # TODO: Log prediction_output for monitoring (consider what part of histogram to log)
+        # log_prediction_for_monitoring(req.county, req.year, req.crop, histogram_data) 
 
-        if prediction_result is not None:
-            PREDICTED_YIELD_DISTRIBUTION.observe(prediction_result)
-
-        # log_prediction_for_monitoring will be called in finally block
-
-        return {
-            "county": req.county,
-            "year": req.year,
-            "predicted_yield": prediction_result,
-        }
-    except FeatureNotFoundError as e:
+    except ModelServingBaseError as e:
+        logger.warning("Prediction failed due to known error", error_type=type(e).__name__, detail=str(e))
         error_message = str(e)
-        logger.warning("Data not found for prediction", error=error_message)
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_message)
-    except (
-        FeatureServiceError,
-        ConfigurationError,
-        ModelServingBaseError,
-    ) as e: # Catch specific service/config errors
-        error_message = f"Service dependency failed: {e}"
-        logger.error(
-            "Service dependency or configuration error during prediction",
-            error=str(e),
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=error_message
-        )
-    except (
-        InvalidModelInputError,
-        InvalidModelOutputError,
-        ModelInferenceError,
-    ) as e: # Catch specific model errors
-        error_message = f"Invalid data or model output: {e}"
-        logger.warning("Invalid data or model output during prediction", error=str(e))
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=error_message
-        )
-    except Exception as e: # Catch any other unexpected errors
-        error_message = "An internal server error occurred during prediction."
+        status_code = e.status_code if hasattr(e, 'status_code') else status.HTTP_400_BAD_REQUEST
+        # prediction_output remains None, will be structured in the final response part
+    except Exception as e:
         logger.exception("Unexpected error during prediction")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_message
+        error_message = "An unexpected error occurred."
+        status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        # prediction_output remains None
+
+    if error_message:
+        # For single prediction, if error, return the error directly with appropriate status code
+        # The BatchPredictionResponseItem structure is more for the batch endpoint's itemization
+        # However, to keep it somewhat consistent for now, or if we decide to wrap single responses similarly:
+        final_response_item = BatchPredictionResponseItem(
+            county=req.county, year=req.year, cut_off_date=req.cut_off_date, crop=req.crop, predicted_histogram=None, error=error_message
         )
-    finally:
-        # Ensure log_prediction_for_monitoring is called even if an exception occurs before return
-        log_prediction_for_monitoring( # This function handles error logging internally
-            request_data=req.model_dump(),
-            prediction=prediction_result if error_message is None else None,
-            error=error_message,
-        )
-        structlog.contextvars.unbind_contextvars("county", "year")
+        # MODIFIED: Added mode='json' for proper date serialization
+        return JSONResponse(status_code=status_code, content=final_response_item.model_dump(mode='json', exclude_none=True))
+
+    return prediction_output # This is already a BatchPredictionResponseItem
 
 
 @app.post(
     "/predict_batch",
     response_model=BatchPredictionResponse,
     tags=["Predictions"],
-    summary="Get multiple yield predictions in batch",
-    description="Fetch features concurrently and predict yield for multiple county/year pairs.",
-    response_description="A list of prediction results or errors for each item in the batch request.",
+    summary="Get multiple yield histogram predictions in batch",
+    description="Fetch features concurrently and predict yield histograms for multiple county/year/crop/date combinations.",
+    response_description="A list of histogram prediction results or errors for each item in the batch request.",
 )
-@limiter.limit(
-    lambda: settings.api.predict_batch_limit if settings else default_batch_limit
-)
+# @limiter.limit(
+#     get_dynamic_predict_batch_limit  # Use the new async helper function
+# )
 async def get_batch_predictions(
     request: Request, # Passed by SlowAPI middleware
     batch_req: BatchPredictionRequest = Body(
         ...,
-        example={
-            "requests": [
-                {"county": "CountyA", "year": 2022},
-                {"county": "CountyB", "year": 2023},
+        example=BatchPredictionRequest(
+            requests=[
+                PredictionRequest(
+                    county="19153", 
+                    year=2023, 
+                    cut_off_date="2023-08-01", 
+                    crop="corn", 
+                    histogram_bins=[0, 50, 100, 150, 200, 250]
+                ),
+                PredictionRequest(
+                    county="17031", 
+                    year=2022, 
+                    cut_off_date="2022-07-15", 
+                    crop="soybeans", 
+                    histogram_bins=[0, 20, 40, 60, 80]
+                )
             ]
-        },
+        ).model_dump()
     ),
-    # CORRECT: Pass the callable function name
-    model_tuple=Depends(get_model_and_mapping),
+    model_data=Depends(get_model_and_mapping), # model, fips_map, crop_map
 ):
-    # Unpack the model and mapping
-    model, fips_mapping = model_tuple
+    model, fips_mapping, crop_mapping = model_data # Unpack
 
-    request_count = len(batch_req.requests)
-    structlog.contextvars.bind_contextvars(batch_size=request_count)
-    logger.info("Received batch prediction request")
-    # Initialize results list with placeholders for each request item
-    results = [{ "county": r.county, "year": r.year, "predicted_yield": None, "error": None } for r in batch_req.requests]
-
-
-    try:
-        # check_data_drift(...) # Adapt drift check for batch input
-
-        request_dicts = [req.model_dump() for req in batch_req.requests]
-
-        # Pass the model, mapping, and request_dicts to predict_yield_batch
-        processed_results = await predict_yield_batch(model, fips_mapping, request_dicts)
-        # predict_yield_batch is expected to return a list of dictionaries mirroring BatchPredictionResponseItem structure
-
-        # Update the original results list with processed_results based on county/year or index
-        # Assuming predict_yield_batch returns results in the same order as requests
-        for i, item_result in enumerate(processed_results):
-             results[i] = item_result # Overwrite the placeholder with the result
-
-        # Log metrics and monitoring for each item in the *final* results list
-        success_count = 0
-        failure_count = 0
-        for item_result in results:
-            predicted_yield = item_result.get("predicted_yield")
-            error_message = item_result.get("error")
-
-            log_prediction_for_monitoring(
-                request_data={"county": item_result.get("county"), "year": item_result.get("year")},
-                prediction=predicted_yield,
-                error=error_message,
-            )
-
-            if error_message is None and predicted_yield is not None:
-                BATCH_PREDICTION_OUTCOMES.labels(outcome="success").inc()
-                PREDICTED_YIELD_DISTRIBUTION.observe(predicted_yield)
-                success_count += 1
-            else:
-                BATCH_PREDICTION_OUTCOMES.labels(outcome="error").inc()
-                failure_count += 1
-
-
-        logger.info(
-            "Batch results summary",
-            success_count=success_count,
-            failure_count=failure_count,
-        )
-        return BatchPredictionResponse(responses=results)
-
-    except (
-        ConfigurationError,
-        ModelServingBaseError,
-    ) as e: # Catch fatal errors during batch processing setup/teardown
-        logger.error(
-            "Fatal Model serving error during batch prediction setup",
-            error=str(e),
-            exc_info=True,
-        )
-        # Log errors for each item and return errors for all items
-        for i, req in enumerate(batch_req.requests):
-            error_message = f"Fatal service error during batch setup: {e}"
-            results[i] = {
-                 "county": req.county,
-                 "year": req.year,
-                 "error": error_message,
-            }
-            BATCH_PREDICTION_OUTCOMES.labels(outcome="error").inc()
-            log_prediction_for_monitoring(
-                request_data={"county": req.county, "year": req.year},
-                prediction=None,
-                error=error_message,
-            )
-
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Fatal service error during batch setup: {e}",
-        )
-
-    except Exception as e: # Catch any other unexpected errors during batch processing
-        logger.exception(
-            "Unexpected error during batch prediction setup or finalization"
-        )
-        # Ensure all items have an error if a global error occurred
-        for i, req in enumerate(batch_req.requests):
-             if "error" not in results[i]: # Only assign if not already assigned by predict_yield_batch
-                 error_message = "An internal error occurred during batch processing."
-                 results[i]["error"] = error_message
-                 BATCH_PREDICTION_OUTCOMES.labels(outcome="error").inc()
-                 log_prediction_for_monitoring(
-                     request_data={"county": req.county, "year": req.year},
-                     prediction=None,
-                     error=error_message,
-                 )
-
-
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected internal error occurred during batch processing.",
-        )
-
-    finally:
-        structlog.contextvars.unbind_contextvars("batch_size")
+    # Call the batch prediction function (which needs to be updated)
+    results = await predict_yield_batch(
+        model=model,
+        fips_mapping=fips_mapping,
+        crop_mapping=crop_mapping, # Pass crop_mapping
+        requests=batch_req.requests # Pass the list of PredictionRequest objects
+    )
+    return BatchPredictionResponse(responses=results)
 
 
 # --- Model Info Endpoint ---
@@ -450,37 +325,21 @@ async def get_batch_predictions(
     description="Returns details about the ML model currently loaded by the service.",
     response_description="Information about the loaded model.",
 )
-def model_info():
-    # No dependency needed here, just report configuration/globals
-    if loaded_model_instance is None or loaded_fips_mapping is None:
-         logger.warning("Model info requested but model not loaded.")
-         raise HTTPException(
-             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-             detail="Model or FIPS mapping is not available due to loading error.",
-         )
+async def model_info():
+    app_settings = await get_app_settings() # Ensures settings are loaded
 
-    # Retrieve loaded model info from settings (loaded at startup)
-    model_name = settings.mlflow.model_name
-    model_stage = settings.mlflow.model_stage
-    mlflow_uri = settings.mlflow.tracking_uri
-
-    # Optionally, add details about the specific model version loaded
-    # This requires storing the version info during load_ml_model in mlflow_loader.py
-    # and making it accessible here (e.g., as a global variable or part of the loaded_model_instance tuple)
-    # version = loaded_model_version if 'loaded_model_version' in globals() else "unknown"
+    # No need to check if app_settings is None, get_app_settings will raise if load fails
 
     logger.info(
-        "Returning model info",
-        model_name=model_name,
-        model_stage=model_stage,
-        mlflow_uri=mlflow_uri,
-        # model_version=version # Add if available
+        "Returning model info based on AppSettings",
+        model_name=app_settings.mlflow.model_name,
+        model_stage=app_settings.mlflow.model_stage,
+        mlflow_uri=str(app_settings.mlflow.tracking_uri),
     )
     return {
-        "model_name": model_name,
-        "model_stage": model_stage,
-        "mlflow_uri": mlflow_uri,
-        # "model_version": version # Add this if you track it
+        "model_name": app_settings.mlflow.model_name,
+        "model_stage": app_settings.mlflow.model_stage,
+        "mlflow_uri": str(app_settings.mlflow.tracking_uri), # Ensure string conversion for HttpUrl
     }
 
 
@@ -493,42 +352,25 @@ def model_info():
     description="Checks if the service is running and essential dependencies (model, feature service) are available.",
     response_description="Service status.",
 )
-# CORRECT: Dependency ensures model is loaded or throws ModelServingBaseError/ConfigurationError
 async def health_check(
-    model_tuple=Depends(get_model_and_mapping), # <-- CORRECTED LINE - removes ()
+    app_settings: AppSettings = Depends(get_app_settings), # Now AppSettings should be defined
+    model_data = Depends(get_model_and_mapping), 
 ):
-    # The dependency 'get_model_and_mapping' ensures the model is loaded.
-    # The fact that this function is reached without the dependency raising an exception
-    # means the model loading part of the health check passed.
-
-    # Check feature service connectivity only if URL is configured and settings loaded
-    if settings and settings.feature_service and settings.feature_service.url:
+    # The get_app_settings dependency ensures settings are loaded.
+    # The get_model_and_mapping dependency ensures an attempt to load the model was made.
+    # Model loading success/failure is implicitly checked by get_model_and_mapping not raising an unhandled error here.
+    # Actual check for feature service:
+    if app_settings.feature_service and app_settings.feature_service.url:
         feature_service_ok = False
-        # Use the client initialized globally in predict.py
-        # Use the feature service URL directly, stripping potential trailing slashes
-        feature_service_base_url = str(settings.feature_service.url).rstrip("/")
-
+        feature_service_base_url = str(app_settings.feature_service.url).rstrip("/")
         try:
-            # Option 1: Ping the base URL (like the second definition did)
-            # start_time = time.time()
-            # response = await async_client.head(feature_service_base_url, timeout=settings.feature_service.timeout_seconds)
-            # elapsed_time = time.time() - start_time
-            # FEATURE_SERVICE_LATENCY.observe(elapsed_time)
-            # if 200 <= response.status_code < 400: # Check for success codes
-            #     feature_service_ok = True
-            #     logger.debug("Health check: Feature service base URL reachable", url=feature_service_base_url, status_code=response.status_code)
-            # else:
-            #      logger.warning("Health check: Feature service base URL returned unexpected status", url=feature_service_base_url, status_code=response.status_code)
-
-            # Option 2: Ping a specific /health endpoint on FS (assuming it exists and is standard)
             feature_service_health_url = f"{feature_service_base_url}/health"
             start_time = time.time()
-            # Use GET for a health endpoint
-            response = await async_client.get(feature_service_health_url, timeout=settings.feature_service.timeout_seconds)
+            response = await async_client.get(feature_service_health_url, timeout=app_settings.feature_service.timeout_seconds)
             elapsed_time = time.time() - start_time
-            FEATURE_SERVICE_LATENCY.observe(elapsed_time) # Log latency for this request
+            FEATURE_SERVICE_LATENCY.observe(elapsed_time)
 
-            if response.status_code == 200: # Check specifically for 200 OK for a health endpoint
+            if response.status_code == 200:
                 feature_service_ok = True
                 logger.debug(
                     "Health check: Feature service reachable and healthy",
@@ -536,21 +378,17 @@ async def health_check(
                     status_code=response.status_code,
                 )
             else:
-                # Treat any non-200 from a health endpoint as unhealthy
                 logger.warning(
                     "Health check: Feature service reachable but unhealthy or error status",
                     url=feature_service_health_url,
                     status_code=response.status_code,
-                    response_body=response.text, # Log body for non-200 responses
+                    response_body=response.text,
                 )
-
-
         except httpx.RequestError as e:
-            # Note: Latency for failed requests might not be captured by the Histogram unless added specifically in except block
             logger.error(
                 "Health check failed: Could not connect to Feature Service health endpoint",
                 error=str(e),
-                url=f"{feature_service_base_url}/health", # Log the specific health check URL
+                url=f"{feature_service_base_url}/health",
             )
         except Exception as e:
             logger.exception(
@@ -558,7 +396,6 @@ async def health_check(
             )
 
         if not feature_service_ok:
-            # Raise 503 if feature service check failed
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Dependency failed: Cannot reach Feature Service or it's unhealthy",
@@ -568,8 +405,6 @@ async def health_check(
             "Health check: Feature Service URL is None or not configured, skipping connectivity check."
         )
 
-
-    # If we reached here, the model loaded successfully (due to Depends) AND the Feature Service is reachable/healthy (if configured)
     logger.debug("Health check successful")
     return {"status": "ok"}
 
@@ -594,3 +429,27 @@ async def shutdown_event():
         logger.info("Httpx client closed.")
     else:
         logger.warning("Httpx client was not initialized, skipping close.")
+
+# --- Startup event to pre-load model and settings ---
+@app.on_event("startup")
+async def startup_event_tasks():
+    logger.info("Application startup: Initializing settings and attempting to pre-load model...")
+    try:
+        app_settings = await get_app_settings()
+        app.state.app_settings = app_settings # STORE SETTINGS IN APP.STATE
+        logger.info("Application settings initialized and stored in app.state.")
+        
+        # Use rate limit values from settings for the Limiter instance
+        # Accessing limiter from app.state.limiter
+        # This is a bit tricky as limiter defaults are usually static. 
+        # The lambda in @limiter.limit directly uses settings, which is better.
+        # For default_limits on the Limiter object itself, it would need re-init or modification here.
+        # For now, we rely on per-endpoint lambdas correctly using get_app_settings.
+
+        # Attempt to pre-load model and mappings
+        await get_model_and_mapping() 
+        logger.info("Model and mappings pre-loaded successfully (or attempt was made).")
+    except ConfigurationError as e:
+        logger.error(f"Startup initialization or model pre-loading failed: {e}. Service will run but some functionalities may be impaired.")
+    except Exception as e:
+        logger.error(f"Unexpected error during startup tasks: {e}", exc_info=True)

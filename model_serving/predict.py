@@ -3,11 +3,13 @@ import structlog  # Import structlog
 import httpx
 import asyncio
 import time  # Import time for latency measurement
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from .mlflow_loader import (
     settings,
     get_model_and_mapping,
+    get_app_settings,
 )  # Import the dependency function here too
+from .schemas import PredictionRequest, BatchPredictionResponseItem # Added Pydantic models
 
 # Import custom exceptions
 from model_serving.exceptions import (
@@ -31,7 +33,13 @@ from tenacity import (
 )
 
 # Import the custom metric from metrics module
-from model_serving.metrics import FEATURE_SERVICE_LATENCY
+from model_serving.metrics import FEATURE_SERVICE_LATENCY, BATCH_PREDICTION_OUTCOMES # Added BATCH_PREDICTION_OUTCOMES
+# Import drift monitoring function
+from model_serving.drift import log_prediction_for_monitoring # Added log_prediction_for_monitoring
+
+# Import torch
+import torch
+from datetime import date
 
 # Get structlog logger instance
 logger = structlog.get_logger(__name__)
@@ -70,22 +78,28 @@ max_wait = (
     reraise=True,
 )
 async def get_features_from_api(
-    county: str, year: int
-) -> Dict[str, Any] | None:  # Changed return type hint
-    """Fetches features for a given county and year from the feature service API, with retry logic."""
-    log = logger.bind(county=county, year=year)
+    county: str, year: int, cut_off_date: Optional[str] = None, crop_name: Optional[str] = None
+) -> Dict[str, Any]:  # Return type is the full feature service response dict
+    """Fetches features for a given county, year, cut-off date, and crop from the feature service API."""
+    log = logger.bind(county=county, year=year, cut_off_date=cut_off_date, crop_name=crop_name)
+    app_settings = await get_app_settings() # Get app settings
 
-    if not settings or not settings.feature_service.url:
+    if not app_settings.feature_service.url:
         log.error("Feature service URL is not configured.")
         raise ConfigurationError("Feature service URL is not configured.")
 
-    # --- Use the new Feature Service endpoint ---
-    feature_url = f"{settings.feature_service.url}/features"
-    # Use query parameters, not body, for GET request
-    params = {"county": county, "year": year}
-    # ------------------------------------------
+    # MODIFIED: Robust URL joining
+    base_url = str(app_settings.feature_service.url).rstrip('/') 
+    endpoint_path = "features"
+    feature_url = f"{base_url}/{endpoint_path}"
 
-    timeout = settings.feature_service.timeout_seconds if settings else 10.0
+    params = {"county": county, "year": year}
+    if cut_off_date:
+        params["cut_off_date"] = cut_off_date # Feature service expects YYYY-MM-DD string
+    if crop_name:
+        params["crop"] = crop_name
+    
+    timeout = app_settings.feature_service.timeout_seconds
 
     start_time = time.time()
     response = None
@@ -179,385 +193,200 @@ async def get_features_from_api(
 
 
 async def predict_yield(
-    model, fips_mapping: Dict[str, int], county: str, year: int
-) -> float:
-    """Predicts yield by fetching features from Feature Service and running the model."""
-    log = logger.bind(county=county, year=year)
+    model: Any, 
+    fips_mapping: Dict[str, int], 
+    crop_mapping: Dict[str, int], 
+    county: str, 
+    year: int, 
+    cut_off_date: date, # datetime.date object from Pydantic
+    crop_name: str, 
+    histogram_bins: List[float]
+) -> Dict[str, List[float]]: # Returns histogram dict
+    """Predicts yield histogram by fetching features and running the model."""
+    log = logger.bind(county=county, year=year, crop_name=crop_name, cut_off_date=str(cut_off_date))
+    app_settings = await get_app_settings() # Get app settings
 
     try:
-        log.debug("Fetching features for single prediction from Feature Service")
-        # get_features_from_api now returns the dictionary response, not just weather data
+        log.debug("Fetching features for single histogram prediction")
+        # Convert date to ISO string for the API call
+        cut_off_date_str = cut_off_date.isoformat() if cut_off_date else None
         feature_response = await get_features_from_api(
-            county, year
-        )  # Exceptions propagate
+            county, year, cut_off_date_str, crop_name
+        )
 
-        # --- Extract data from Feature Service Response and Prepare Model Input ---
         weather_data_list = feature_response.get("weather_data")
         if not weather_data_list:
-            # This case should ideally be handled by get_features_from_api raising 404 if no data
-            # But defensive check here.
             log.warning("Received empty weather_data list from Feature Service")
             raise FeatureNotFoundError(
-                f"No valid weather data found in Features Service response for {county}, {year}."
+                f"No valid weather data found via Feature Service for {county}, {year}, {crop_name}, up to {cut_off_date_str}."
             )
 
-        # Convert list of dicts to pandas DataFrame, then to tensor
         try:
             weather_df = pd.DataFrame(weather_data_list)
-            # Ensure columns match training order and drop non-feature columns if any slipped through
-            # This is a critical step for consistency. You might need to store the
-            # list of expected weather feature column names from your training process.
-            # For now, assume the FS provides exactly the weather columns needed in the correct order.
+            # Placeholder: Ensure weather_df columns match training order.
+            # This might involve fetching expected column order from model metadata or config.
             weather_tensor = torch.tensor(weather_df.values, dtype=torch.float32)
-            # Add batch dimension (batch size = 1 for single prediction)
             weather_tensor = weather_tensor.unsqueeze(0)  # Shape (1, seq_len, features)
 
-            # Get FIPS ID from the mapping
             if county not in fips_mapping:
-                log.warning(
-                    "County FIPS not found in loaded FIPS mapping", county=county
-                )
-                raise InvalidModelInputError(
-                    f"County FIPS '{county}' is not in the model's trained mapping."
-                )
+                log.warning("County FIPS not found in loaded FIPS mapping", fips_code=county)
+                raise InvalidModelInputError(f"County FIPS '{county}' is not in the model's FIPS mapping.")
             fips_id = fips_mapping[county]
-            fips_id_tensor = torch.tensor([fips_id], dtype=torch.long)  # Shape (1,)
+            fips_id_tensor = torch.tensor([fips_id], dtype=torch.long)
 
-            # Move tensors to device (assuming device is determined in app.py or passed)
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            weather_tensor = weather_tensor.to(device)
-            fips_id_tensor = fips_id_tensor.to(device)
+            # Handle crop ID
+            if crop_name.lower() not in crop_mapping:
+                log.warning("Crop name not found in loaded crop mapping", crop_name=crop_name)
+                # Option: Fallback to a default crop ID if defined, or raise error
+                # For now, raising error. Consider adding a default_crop_id to crop_mapping if needed.
+                default_crop_key = next((k for k in crop_mapping if "default" in k.lower()), None)
+                if default_crop_key:
+                    crop_id = crop_mapping[default_crop_key]
+                    log.info(f"Using default crop ID for '{crop_name}' as it was not found in mapping.")
+                else:
+                    raise InvalidModelInputError(f"Crop name '{crop_name}' is not in the model's crop mapping and no default found.")
+            else:
+                crop_id = crop_mapping[crop_name.lower()]
+            crop_id_tensor = torch.tensor([crop_id], dtype=torch.long)
+            
+            # Device handling (assuming model is already on the correct device from mlflow_loader)
+            # If not, move tensors to model.device
+            # device = next(model.parameters()).device
+            # weather_tensor = weather_tensor.to(device)
+            # fips_id_tensor = fips_id_tensor.to(device)
+            # crop_id_tensor = crop_id_tensor.to(device)
 
             log.debug(
                 "Model input tensors prepared",
-                weather_shape=weather_tensor.shape,
-                fips_shape=fips_id_tensor.shape,
+                weather_shape=str(weather_tensor.shape),
+                fips_shape=str(fips_id_tensor.shape),
+                crop_shape=str(crop_id_tensor.shape),
             )
-
         except Exception as e:
-            log.error(
-                "Failed to prepare model input tensors from Feature Service data",
-                error=str(e),
-                exc_info=True,
-            )
-            raise InvalidModelInputError(
-                f"Failed to process Feature Service data into model input: {e}"
-            ) from e
+            log.error("Failed to prepare model input tensors", error=str(e), exc_info=True)
+            raise InvalidModelInputError(f"Failed to process data into model input: {e}") from e
 
-        # --- Model Prediction ---
         try:
-            # Ensure model is in evaluation mode for inference (dropout off)
             model.eval()
             with torch.no_grad():
-                prediction = model(weather_tensor, fips_id_tensor)
+                # Model now expects weather, fips_ids, crop_ids
+                logits = model(weather_tensor, fips_id_tensor, crop_id_tensor) # (B, num_bins)
+            
+            # Ensure output is as expected (e.g., (1, num_bins))
+            if logits.ndim != 2 or logits.shape[0] != 1:
+                log.error("Unexpected model output shape", shape=str(logits.shape))
+                raise ModelInferenceError("Model output has unexpected shape.")
 
-            log.debug("Model prediction executed")
+            # Apply softmax to get probabilities
+            probabilities = torch.softmax(logits, dim=1).squeeze().tolist() # Get list of probabilities
+
+            # Validate number of probabilities against number of bins implied by edges
+            if len(probabilities) != (len(histogram_bins) - 1):
+                log.error(
+                    "Mismatch between model output size and histogram_bins",
+                    num_probabilities=len(probabilities),
+                    num_expected_bins=len(histogram_bins) - 1
+                )
+                raise InvalidModelOutputError(
+                    f"Model produced {len(probabilities)} probabilities, but histogram_bins imply {len(histogram_bins)-1} bins."
+                )
+
+            # Prepare histogram dictionary
+            histogram_output = {
+                "bin_edges": histogram_bins,
+                "probabilities": probabilities
+            }
+            log.debug("Histogram prediction successful", histogram=histogram_output)
+            return histogram_output
+
         except Exception as e:
-            log.exception("An unexpected error occurred during model inference")
-            raise ModelInferenceError("Model inference failed.") from e
+            log.error("Model inference or output processing failed", error=str(e), exc_info=True)
+            raise ModelInferenceError(f"Error during model inference: {e}") from e
 
-        # --- Result Processing ---
-        try:
-            # prediction is a tensor, convert to scalar float
-            prediction_scalar = prediction.item()  # Assuming batch size 1 output
-
-            log.debug("Prediction result processed", prediction=prediction_scalar)
-            return prediction_scalar
-        except Exception as e:
-            log.error(
-                "Could not convert model output tensor to scalar",
-                output_type=type(prediction),
-                output_value=prediction,
-                error=str(e),
-            )
-            raise InvalidModelOutputError(f"Could not process model output: {e}") from e
-
-    # --- Catch and Re-raise Specific Errors ---
-    # Catch custom errors propagated from get_features_from_api or created here
-    except (
-        FeatureNotFoundError,
-        FeatureRequestError,
-        FeatureResponseError,
-        FeatureServiceError,
-    ) as e:
-        log.warning("Prediction failed due to feature service issue", error=str(e))
-        raise  # Re-raise to be handled by API layer
-    except (InvalidModelInputError, InvalidModelOutputError, ModelInferenceError) as e:
-        log.warning("Prediction failed due to model inference issue", error=str(e))
-        raise  # Re-raise to be handled by API layer
-    except ConfigurationError as e:
-        log.error("Prediction failed due to configuration error", error=str(e))
-        raise  # Re-raise
-    except Exception as e:
-        log.exception("An unexpected error occurred in predict_yield")
-        raise ModelServingBaseError(
-            "An internal error occurred during the prediction process."
-        ) from e
+    # FeatureNotFoundError, ConfigurationError, etc. from get_features_from_api will propagate
+    # Other exceptions like InvalidModelInputError are raised above
+    except ModelServingBaseError: # Re-raise known errors
+        raise
+    except Exception as e: # Catch any other unexpected error during the process
+        log.exception("Unexpected error in predict_yield pipeline")
+        raise ModelServingBaseError("An unexpected error occurred during yield prediction.") from e
 
 
 async def predict_yield_batch(
-    model, fips_mapping: Dict[str, int], requests: List[Dict[str, Any]]
-) -> List[Dict[str, Any]]:
-    """Processes a batch of prediction requests."""
+    model: Any, 
+    fips_mapping: Dict[str, int], 
+    crop_mapping: Dict[str, int], 
+    requests: List[PredictionRequest] # Changed to List[PredictionRequest]
+) -> List[BatchPredictionResponseItem]:
+    """Processes a batch of prediction requests concurrently."""
     log = logger.bind(batch_size=len(requests))
-    log.debug("Starting batch prediction process")
+    log.info("Starting batch histogram prediction")
 
-    results = [{} for _ in requests]
-    feature_tasks = []
-    original_indices = []
+    # Create a list of coroutines for each prediction
+    # Each item in `requests` is a Pydantic `PredictionRequest` model
+    tasks = [
+        predict_yield(
+            model=model,
+            fips_mapping=fips_mapping,
+            crop_mapping=crop_mapping,
+            county=req.county,
+            year=req.year,
+            cut_off_date=req.cut_off_date,
+            crop_name=req.crop,
+            histogram_bins=req.histogram_bins
+        )
+        for req in requests
+    ]
 
-    # --- Feature Fetching (Batch) ---
-    # Call get_features_from_api for each request concurrently
-    for i, req in enumerate(requests):
-        county = req.get("county")
-        year = req.get("year")
-        if county and year:
-            # Store original request info with the task index
-            feature_tasks.append(
-                asyncio.create_task(
-                    get_features_from_api(county, year), name=f"fetch_batch_{i}"
+    # Run all prediction tasks concurrently and gather results
+    # `return_exceptions=True` allows us to get exceptions instead of failing the whole batch
+    results_or_exceptions = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Process results to form BatchPredictionResponseItem list
+    response_items: List[BatchPredictionResponseItem] = []
+    for i, res_or_exc in enumerate(results_or_exceptions):
+        req_item = requests[i] # Original request for context
+        item_log = logger.bind(county=req_item.county, year=req_item.year, crop=req_item.crop, cut_off_date=str(req_item.cut_off_date))
+
+        if isinstance(res_or_exc, Exception):
+            error_message = f"Error processing item: {type(res_or_exc).__name__} - {str(res_or_exc)}"
+            item_log.warning("Item in batch failed", error=error_message, exc_info=False) # exc_info=False to avoid large logs for common errors
+            response_items.append(
+                BatchPredictionResponseItem(
+                    county=req_item.county,
+                    year=req_item.year,
+                    cut_off_date=req_item.cut_off_date,
+                    crop=req_item.crop,
+                    predicted_histogram=None,
+                    error=error_message
                 )
             )
-            original_indices.append(i)
+            BATCH_PREDICTION_OUTCOMES.labels(outcome="error").inc()
         else:
-            log.warning("Invalid item in batch request", item_index=i, request_item=req)
-            results[i] = {
-                "county": req.get("county"),
-                "year": req.get("year"),
-                "error": "Invalid request data (missing county or year)",
-            }
-
-    log.debug("Gathering batch feature fetch tasks", task_count=len(feature_tasks))
-    # Use asyncio.gather to run tasks concurrently
-    feature_responses = await asyncio.gather(*feature_tasks, return_exceptions=True)
-    log.debug("Batch Feature Service tasks completed")
-
-    # --- Process Batch Feature Responses and Prepare for Model ---
-    # Create lists to collect weather tensors and FIPS ID tensors for padding/batching
-    weather_tensors_list = []  # List of tensors (variable length)
-    fips_id_tensors_list = []  # List of FIPS ID tensors (scalar)
-    valid_original_indices = (
-        []
-    )  # Indices in the *original* requests list for valid items
-
-    for i, response in enumerate(feature_responses):
-        original_index = original_indices[i]
-        request_info = {
-            "county": requests[original_index]["county"],
-            "year": requests[original_index]["year"],
-        }
-        item_log = log.bind(
-            item_index=original_index,
-            county=request_info["county"],
-            year=request_info["year"],
-        )
-
-        if isinstance(response, Exception):
-            # Handle exceptions from get_features_from_api
-            if isinstance(response, FeatureNotFoundError):
-                error_message = f"Features not found: {response}"
-            elif isinstance(response, FeatureServiceError):
-                error_message = f"Feature service error: {response}"
-            elif isinstance(response, ConfigurationError):
-                error_message = f"Configuration error: {response}"
-            else:
-                error_message = f"Unexpected error fetching features: {response}"
-                item_log.error(
-                    "Unexpected exception during batch feature fetch",
-                    error=str(response),
-                    exc_info=response,
+            # res_or_exc is the histogram dictionary
+            item_log.info("Item in batch succeeded")
+            response_items.append(
+                BatchPredictionResponseItem(
+                    county=req_item.county,
+                    year=req_item.year,
+                    cut_off_date=req_item.cut_off_date,
+                    crop=req_item.crop,
+                    predicted_histogram=res_or_exc, # This is the histogram dict
+                    error=None
                 )
-
-            item_log.warning(
-                "Error processing batch item during feature fetch", error=error_message
             )
-            results[original_index] = {**request_info, "error": error_message}
+            BATCH_PREDICTION_OUTCOMES.labels(outcome="success").inc()
+            # TODO: Add Prometheus histogram metric observation if applicable from res_or_exc
+            # For example, if you want to observe the mean of the predicted distribution:
+            # mean_pred = calculate_mean_from_histogram(res_or_exc["bin_edges"], res_or_exc["probabilities"])
+            # PREDICTED_YIELD_DISTRIBUTION.observe(mean_pred)
 
-        elif isinstance(response, dict) and "weather_data" in response:
-            # Process valid response from Feature Service
-            weather_data_list = response.get("weather_data")
-            if not weather_data_list:
-                item_log.warning("Received empty weather_data list in response")
-                results[original_index] = {
-                    **request_info,
-                    "error": f"No valid weather data found in season for {request_info['county']}, {request_info['year']}.",
-                }
-                continue  # Skip to the next response
-
-            try:
-                # Convert list of dicts to DataFrame, then to tensor
-                weather_df = pd.DataFrame(weather_data_list)
-                weather_tensor = torch.tensor(
-                    weather_df.values, dtype=torch.float32
-                )  # Shape (seq_len, features)
-                weather_tensors_list.append(weather_tensor)
-
-                # Get FIPS ID tensor
-                county = request_info["county"]  # Use county from original request
-                if county not in fips_mapping:
-                    item_log.warning(
-                        "County FIPS not found in loaded FIPS mapping", county=county
-                    )
-                    results[original_index] = {
-                        **request_info,
-                        "error": f"County FIPS '{county}' is not in the model's trained mapping.",
-                    }
-                    continue  # Skip this item
-                fips_id = fips_mapping[county]
-                fips_id_tensor = torch.tensor(
-                    fips_id, dtype=torch.long
-                )  # Shape () - scalar
-                fips_id_tensors_list.append(fips_id_tensor)
-
-                valid_original_indices.append(original_index)
-                item_log.debug("Feature data processed successfully for batch item")
-
-            except Exception as e:
-                item_log.error(
-                    "Failed to process Feature Service data into tensors for batch item",
-                    error=str(e),
-                    exc_info=True,
-                )
-                results[original_index] = {
-                    **request_info,
-                    "error": f"Failed to process feature data: {e}",
-                }
-
-        else:
-            # Unexpected response type
-            error_message = (
-                f"Unexpected response type from Feature Service: {type(response)}"
-            )
-            item_log.error(
-                "Unexpected response type for batch item", response_type=type(response)
-            )
-            results[original_index] = {**request_info, "error": error_message}
-
-    if not weather_tensors_list:
-        log.warning("No valid items to process after fetching features for the batch.")
-        # Ensure any items that didn't get processed have an error set
-        for i, result in enumerate(results):
-            if (
-                not result
-            ):  # If still empty, it means it wasn't processed/assigned an error
-                results[i] = {
-                    "county": requests[i].get("county"),
-                    "year": requests[i].get("year"),
-                    "error": "Item skipped due to upstream error.",
-                }
-
-        return results  # Return batch results with errors
-
-    # --- Prepare Batch Tensors using collate_fn ---
-    try:
-        # collate_fn expects a list of tuples: [(weather_tensor, dummy_y, fips_id), ...]
-        # We only have weather_tensor and fips_id_tensor here.
-        # We can adapt or manually replicate collate_fn's padding logic.
-        # Let's manually replicate padding and stacking for batch prediction.
-
-        # Padding weather sequences
-        # Use the collate_fn logic directly but with our lists
-        # Need to add a dummy element for the second item in the tuple since collate_fn expects 3
-        batch_for_collate = [
-            (w_t, torch.tensor(0.0), f_id_t)
-            for w_t, f_id_t in zip(weather_tensors_list, fips_id_tensors_list)
-        ]
-
-        weather_batch_padded, _, fips_batch_stacked = torch.nn.utils.rnn.collate_fn(
-            batch_for_collate
+        # Log for monitoring (simplified for batch)
+        log_prediction_for_monitoring(
+            request_data=req_item.model_dump(), # Log the full request
+            prediction=res_or_exc if not isinstance(res_or_exc, Exception) else None,
+            error=str(res_or_exc) if isinstance(res_or_exc, Exception) else None
         )
 
-        # Move batch tensors to device
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        weather_batch_padded = weather_batch_padded.to(device)
-        fips_batch_stacked = fips_batch_stacked.to(device)
-
-        log.debug(
-            "Batch tensors prepared for model",
-            weather_batch_shape=weather_batch_padded.shape,
-            fips_batch_shape=fips_batch_stacked.shape,
-        )
-
-    except Exception as e:
-        log.error("Failed to pad and stack batch tensors", error=str(e), exc_info=True)
-        error_message = "Internal error preparing data for model."
-        # Mark all currently valid items as errored
-        for idx in valid_original_indices:
-            request_info = {
-                "county": requests[idx]["county"],
-                "year": requests[idx]["year"],
-            }
-            results[idx] = {**request_info, "error": error_message}
-        return results  # Return batch results with errors
-
-    # --- Model Prediction (Batch) ---
-    try:
-        # Ensure model is in evaluation mode
-        model.eval()
-        with torch.no_grad():
-            batch_predictions_tensor = model(weather_batch_padded, fips_batch_stacked)
-
-        log.info(
-            "Batch model prediction executed",
-            prediction_count=batch_predictions_tensor.size(0),
-        )
-
-        # --- Process Batch Results ---
-        batch_predictions_list = (
-            batch_predictions_tensor.cpu().numpy().tolist()
-        )  # Convert to Python list
-
-        if len(batch_predictions_list) != len(valid_original_indices):
-            log.error(
-                "Mismatch between prediction count and valid input count",
-                prediction_count=len(batch_predictions_list),
-                valid_input_count=len(valid_original_indices),
-            )
-            raise InvalidModelOutputError(
-                f"Model returned {len(batch_predictions_list)} predictions for {len(valid_original_indices)} inputs."
-            )
-
-        # Map predictions back to the original results list using valid_original_indices
-        for i, prediction_scalar in enumerate(batch_predictions_list):
-            original_index = valid_original_indices[i]
-            request_info = {
-                "county": requests[original_index]["county"],
-                "year": requests[original_index]["year"],
-            }
-            # Place the successful prediction in the result list at the original index
-            results[original_index] = {
-                **request_info,
-                "predicted_yield": prediction_scalar,
-            }
-            log.debug(
-                "Mapped batch prediction successfully",
-                item_index=original_index,
-                prediction=prediction_scalar,
-            )
-
-    except (InvalidModelOutputError, ModelInferenceError) as e:
-        log.error(
-            "Error during batch model prediction or output processing",
-            error=str(e),
-            exc_info=True,
-        )
-        error_message = "Internal error during batch prediction."
-        # Mark all currently valid items as errored
-        for idx in valid_original_indices:
-            request_info = {
-                "county": requests[idx]["county"],
-                "year": requests[idx]["year"],
-            }
-            results[idx] = {**request_info, "error": error_message}
-    except Exception as e:
-        log.exception("An unexpected error occurred during batch model prediction")
-        error_message = "Internal error during batch prediction."
-        for idx in valid_original_indices:
-            request_info = {
-                "county": requests[idx]["county"],
-                "year": requests[idx]["year"],
-            }
-            results[idx] = {**request_info, "error": error_message}
-
-    log.debug("Finished batch prediction process")
-    return results
+    log.info("Batch histogram prediction processing complete")
+    return response_items

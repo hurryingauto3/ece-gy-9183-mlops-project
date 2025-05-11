@@ -1,28 +1,9 @@
 services:
-  # jupyter:
-      # profiles: ["gpu"]
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.jupyter
-  #   image: jupyter-mlflow
-  #   container_name: jupyter-container
-  #   ports:
-  #     - "0.0.0.0:8888:8888"
-  #   volumes:
-  #     - ./notebooks:/home/jovyan/work
-  #   environment:
-  #     - MLFLOW_TRACKING_URI=http://mlflow:5001
-  #   command: start-notebook.sh --NotebookApp.token='' --NotebookApp.ip=0.0.0.0 --NotebookApp.allow_origin='*'
-  #   restart: unless-stopped
-  #   depends_on:
-  #     - mlflow
-  # --- New MLflow Service ---
-    # --- New MLflow Service ---
   mlflow:
     profiles: ["services"]
     image: ghcr.io/mlflow/mlflow:v2.0.1
     container_name: mlflow-container
-    platform: linux/amd64 # KEEP this if your host is AMD64 (uname -m is x86_64)
+    platform: linux/arm64/v8 # KEEP this if your host is AMD64 (uname -m is x86_64)
                           # CHANGE to linux/arm64/v8 if your host is ARM64 (uname -m is aarch64)
     ports:
       # IMPORTANT: Your .env has MLFLOW_TRACKING_URI=http://mlflow:5000
@@ -72,7 +53,6 @@ services:
       - --port # Flag for the port to listen on
       - "5001" # Use port 5001 to match the ports mapping in compose
 
-
   # --- Feature Service ---
   feature-service:
     profiles: ["services", "gpu"]
@@ -103,7 +83,6 @@ services:
       # Optional log level
       # - LOG_LEVEL=${LOG_LEVEL:-INFO}
 
-  
   # --- Model Serving Service ---
   model-serving:
     profiles: ["services"]
@@ -165,6 +144,8 @@ services:
     restart: unless-stopped
     depends_on:
       - prometheus
+      - mlflow  # Added dependency on mlflow service
+
 
 # --- ETL Job Service ---
 
@@ -276,7 +257,6 @@ services:
   #     - TRAIN_HOLDOUT_YEAR=${TRAIN_HOLDOUT_YEAR:-}
   #     - TRAIN_VAL_YEAR_RATIO=${TRAIN_VAL_YEAR_RATIO:-0.2}
   #     - TRAIN_CROP_NAME=${TRAIN_CROP_NAME:-corn}
-
 
 
 # Define named volumes for data persistence
