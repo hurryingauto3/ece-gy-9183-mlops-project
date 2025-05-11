@@ -52,19 +52,20 @@ def parse_args():
 # --- Recursive Function to Process Folder Contents File-by-File ---
 def process_folder_contents(gdrive_folder_id, local_base_output_dir, current_local_path_rel, logger, quiet, use_cookies, retries):
     """
-    Downloads all contents of a Google Drive folder using gdown.download_folder.
+    Downloads contents of a Google Drive folder using gdown.download_folder.
+    Applies folder-specific cleanup after download.
     """
-    full_current_local_path = os.path.join(local_base_output_dir, current_local_path_rel)
-    os.makedirs(full_current_local_path, exist_ok=True)
+    # Download to the base output dir; gdown will create its own subfolder
+    download_parent_path = os.path.join(local_base_output_dir, current_local_path_rel)
+    os.makedirs(download_parent_path, exist_ok=True)
 
-    logger.info(f"Processing Google Drive folder ID: {gdrive_folder_id} (Local path: '{full_current_local_path}')")
+    logger.info(f"Processing Google Drive folder ID: {gdrive_folder_id} (Download to: '{download_parent_path}')")
 
     try:
-        logger.info(f"Attempting to download entire folder ID: {gdrive_folder_id} to {full_current_local_path}")
-
+        # Download folder
         success = gdown.download_folder(
-            id=gdrive_folder_id,
-            output=full_current_local_path,
+            url=f"https://drive.google.com/drive/folders/{gdrive_folder_id}",
+            output=download_parent_path,
             quiet=quiet,
             use_cookies=use_cookies
         )
@@ -74,6 +75,42 @@ def process_folder_contents(gdrive_folder_id, local_base_output_dir, current_loc
             return False
 
         logger.info(f"Successfully downloaded folder ID: {gdrive_folder_id}")
+
+        # --- Locate the actual downloaded folder ---
+        downloaded_folders = [
+            os.path.join(download_parent_path, name)
+            for name in os.listdir(download_parent_path)
+            if os.path.isdir(os.path.join(download_parent_path, name))
+        ]
+
+        if not downloaded_folders:
+            logger.warning("No folders found after download.")
+            return False
+
+        # Assume first new folder is the downloaded one (simplest case)
+        downloaded_path = downloaded_folders[0]
+
+        # --- Post-download cleanup ---
+        year_whitelist = {"2017", "2018", "2019", "2020", "2021"}
+
+        if "WRF-HRRR" in downloaded_path:
+            hrrr_data_path = os.path.join(downloaded_path, "data")
+            if os.path.isdir(hrrr_data_path):
+                for folder in os.listdir(hrrr_data_path):
+                    folder_path = os.path.join(hrrr_data_path, folder)
+                    if os.path.isdir(folder_path) and folder not in year_whitelist:
+                        shutil.rmtree(folder_path)
+                        logger.info(f"Deleted HRRR/data folder not in allowed list: {folder_path}")
+
+        elif "USDA Crop" in downloaded_path:
+            usda_crop_path = os.path.join(downloaded_path, "data", "crop")
+            if os.path.isdir(usda_crop_path):
+                for folder in os.listdir(usda_crop_path):
+                    folder_path = os.path.join(usda_crop_path, folder)
+                    if os.path.isdir(folder_path) and folder not in year_whitelist:
+                        shutil.rmtree(folder_path)
+                        logger.info(f"Deleted USDA/data/crop folder not in allowed list: {folder_path}")
+
         return True
 
     except Exception as e:

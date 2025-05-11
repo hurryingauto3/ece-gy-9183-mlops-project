@@ -4,6 +4,8 @@ import pandas as pd
 from pathlib import Path
 import logging
 from collections import defaultdict
+import shutil
+
 
 # --- Logging setup ---
 logger = logging.getLogger("data_processing_pipeline")
@@ -37,7 +39,7 @@ def preprocess_hrrr_all_months(file_paths):
     df_all = pd.concat(dfs, ignore_index=True)
 
     df_clean = df_all[[
-        'Year', 'Month', 'Day', 'State', 'County', 'FIPS Code',
+        'Year', 'Month', 'Day', 'FIPS Code',
         'Avg Temperature (K)', 'Max Temperature (K)', 'Min Temperature (K)',
         'Precipitation (kg m**-2)', 'Relative Humidity (%)',
         'Wind Gust (m s**-1)', 'Wind Speed (m s**-1)'
@@ -182,12 +184,86 @@ def process_usda_data():
                 for fips_code, records in yield_by_fips.items():
                     save_crop_yield(fips_code, crop, records)
 
+def build_final_dataset():
+    all_records = []
+
+    for fips_dir in Path(transformed_data_root).iterdir():
+        if not fips_dir.is_dir():
+            continue
+
+        for year_dir in fips_dir.iterdir():
+            if not year_dir.is_dir():
+                continue
+
+            weather_file = year_dir / f"WeatherTimeSeries{year_dir.name}.csv"
+            if not weather_file.exists():
+                continue
+
+            try:
+                df = pd.read_csv(weather_file)
+                df["FIPS"] = fips_dir.name
+                year = int(year_dir.name)
+
+                for crop in crops:
+                    crop_file = fips_dir / f"{crop.lower()}.json"
+                    yield_val = 0
+                    if crop_file.exists():
+                        with open(crop_file) as f:
+                            crop_yields = json.load(f)
+                            for entry in crop_yields:
+                                if entry["year"] == year:
+                                    yield_val = entry["yield"]
+                                    break
+                    df[f"yield_{crop.lower()}"] = yield_val
+
+                all_records.append(df)
+
+            except Exception as e:
+                logger.error(f"Failed processing {weather_file}: {e}")
+
+    if not all_records:
+        logger.warning("No combined data to process.")
+        return
+
+    full_df = pd.concat(all_records, ignore_index=True)
+
+    training_years = {"2017", "2018", "2019", "2020"}
+    val_test_year = "2021"
+
+    training_df = full_df[full_df["Year"].astype(str).isin(training_years)]
+    year_2022_df = full_df[full_df["Year"].astype(str) == val_test_year]
+
+    val_df = year_2022_df.sample(frac=0.5, random_state=42)
+    test_df = year_2022_df.drop(val_df.index)
+
+    # Save final datasets
+    training_path = Path(transformed_data_root) / "training.csv"
+    val_path = Path(transformed_data_root) / "val.csv"
+    test_path = Path(transformed_data_root) / "test.csv"
+
+    training_df.to_csv(training_path, index=False)
+    val_df.to_csv(val_path, index=False)
+    test_df.to_csv(test_path, index=False)
+
+    logger.info("Datasets saved: training.csv, val.csv, test.csv")
+
+    # --- Cleanup ---
+    for item in Path(transformed_data_root).iterdir():
+        if item.is_dir():
+            shutil.rmtree(item)
+        elif item.name not in {"training.csv", "val.csv", "test.csv"}:
+            item.unlink()
+
+    logger.info("Cleanup complete. Only final datasets retained.")
+
+
 
 # --- Main Orchestration ---
 def main():
     logger.info("=== Transform Pipeline Start ===")
     process_weather_data()
     process_usda_data()
+    build_final_dataset()
     logger.info("=== Transform Pipeline Complete ===")
 
 if __name__ == "__main__":
