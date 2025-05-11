@@ -55,6 +55,7 @@ def preprocess_hrrr_all_months(file_paths):
         'Downward Shortwave Radiation Flux (W m**-2)': 'Solar Flux (W/m²)',
         'Vapor Pressure Deficit (kPa)': 'VPD (kPa)'
     }, inplace=True)
+    df_all.dropna(inplace=True)
     int_columns = ['Day', 'Month', 'Year']
     df[int_columns] = df[int_columns].astype(int)
     df_all["FIPS"] = df_all["FIPS"].astype(int).apply(lambda x: f"{x:05d}")
@@ -108,6 +109,7 @@ def preprocess_usda_data(path, crop_name):
 
         # Normalize column name
         df_filtered.rename(columns={yield_col: "Yield"}, inplace=True)
+        df_filtered.dropna(inplace=True)
 
         yield_by_fips = defaultdict(list)
         for _, row in df_filtered.iterrows():
