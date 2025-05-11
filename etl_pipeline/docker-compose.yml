@@ -1,37 +1,25 @@
 services:
 
-# --- ETL Job Service ---
+  # --- ETL Job Service ---
   etl-download:
     build: ./extract
     container_name: etl-extract-container
     volumes:
-      # - ./local_data:/app/data_lake
-      # - /mnt/persistent/data_lake:/app/data_lake  # use persistent storage
-      - /home/cc/swift_s3:/mnt/swift_store
-    # Add this command section:
+      - /mnt/persistent/data_lake:/mnt/swift_store
     command:
       - poetry
       - run
-      - python # Or /usr/local/bin/python3 depending on your base image/install
-      - /app/extract.py # Path to your script inside the container
-      - ${GOOGLE_DRIVE_FOLDER_ID_HRRR} # Positional argument folder_id
-      - ${GOOGLE_DRIVE_FOLDER_ID_USDA} 
-      # - --swift-container # Named argument flag
-      # - ${FS_OPENSTACK_SWIFT_CONTAINER_NAME} # Named argument value
-      - --clean # Optional: Add --clean flag if you want it to clean up locally
-
+      - python
+      - /app/extract.py
+      - ${GOOGLE_DRIVE_FOLDER_ID_HRRR}
+      - ${GOOGLE_DRIVE_FOLDER_ID_USDA}
+      - --clean
     environment:
-      # Explicitly pass OpenStack credentials to the container
-      # These are needed by the openstack SDK within the script
       - OS_AUTH_URL=${OS_AUTH_URL}
       - OS_AUTH_TYPE=${OS_AUTH_TYPE}
       - OS_APPLICATION_CREDENTIAL_ID=${OS_APPLICATION_CREDENTIAL_ID}
       - OS_APPLICATION_CREDENTIAL_SECRET=${OS_APPLICATION_CREDENTIAL_SECRET}
       - OS_REGION_NAME=${OS_REGION_NAME}
-      # Pass the container name as env var as well, useful for debugging
-      # although the script reads it from command line via compose args
-      # - FS_OPENSTACK_SWIFT_CONTAINER_NAME=${FS_OPENSTACK_SWIFT_CONTAINER_NAME}
-      # Pass the folder ID as env var as well, useful for debugging
       - GOOGLE_DRIVE_FOLDER_ID_HRRR=${GOOGLE_DRIVE_FOLDER_ID_HRRR}
       - GOOGLE_DRIVE_FOLDER_ID_USDA=${GOOGLE_DRIVE_FOLDER_ID_USDA}
 
@@ -40,30 +28,19 @@ services:
     build: ./transform
     container_name: etl-transform-container
     volumes:
-      # - ./local_data:/app/data_lake  # Fetch data from local VM storage
-      # - persistent_data:/mnt/project4/data
-      - /home/cc/swift_s3:/mnt/swift_store
-    # Add this command section:
+      - /mnt/persistent/data_lake:/mnt/swift_store
     command:
       - poetry
       - run
-      - python # Or /usr/local/bin/python3 depending on your base image/install
-      - /app/transform.py # Path to your script inside the container
-      - --swift-container # Named argument flag
-      - ${FS_OPENSTACK_SWIFT_CONTAINER_NAME} # Named argument value
-      - --clean # Optional: Add --clean flag if you want it to clean up locally
-
+      - python
+      - /app/transform.py
+      - --swift-container
+      - ${FS_OPENSTACK_SWIFT_CONTAINER_NAME}
+      - --clean
     environment:
-      # Explicitly pass OpenStack credentials to the container
-      # These are needed by the openstack SDK within the script
       - OS_AUTH_URL=${OS_AUTH_URL}
       - OS_AUTH_TYPE=${OS_AUTH_TYPE}
       - OS_APPLICATION_CREDENTIAL_ID=${OS_APPLICATION_CREDENTIAL_ID}
       - OS_APPLICATION_CREDENTIAL_SECRET=${OS_APPLICATION_CREDENTIAL_SECRET}
       - OS_REGION_NAME=${OS_REGION_NAME}
-      # Pass the container name as env var as well, useful for debugging
-      # although the script reads it from command line via compose args
       - FS_OPENSTACK_SWIFT_CONTAINER_NAME=${FS_OPENSTACK_SWIFT_CONTAINER_NAME}
-      # Pass the folder ID as env var as well, useful for debugging
-
-# Define named volumes for data persistence
