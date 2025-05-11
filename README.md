@@ -80,13 +80,36 @@ The CropNet dataset is the primary data source for this project. It provides a c
 2.  *Diagram Parts:* FastAPI Model Service, Docker containers, CI/CD pipeline, Monitoring scripts, Model Registry, Dashboard for results.
 3.  *Justification:* This setup is easy to scale, follows modern cloud practices, and helps keep the model up to date and reliable.
 4.  *Lecture Link:* Covers Unit 6 (model deployment with API, containerization) and Unit 7 (basic evaluation and monitoring after deployment).
-5.  *Specifics:* The model should respond within 2 seconds, support at least 10 users at once, and update predictions for all counties in under 1 hour. We check accuracy with basic metrics (RMSE, MAE, R²) and look for big changes in input data.
+5.  *Specifics:*
+    *   **Core Components & API:**
+        *   The main model serving logic resides in the `model_serving/` directory.
+        *   `model_serving/app.py`: Implements the FastAPI application. It defines the primary API endpoints:
+            *   `/predict`: Accepts a county FIPS code, year, cut-off date, crop type, and desired histogram bins. It orchestrates feature retrieval, model inference, and returns a predicted yield histogram.
+            *   `/predict_batch`: Designed to handle multiple prediction requests concurrently for improved throughput.
+            *   `/health`: Provides a health check endpoint to verify the service status and its dependencies.
+            *   `/model_info`: Returns details about the ML model currently loaded by the service (e.g., name, stage from MLflow or dummy status).
+        *   `model_serving/predict.py`: Contains the core prediction workflow, including fetching features from the Feature Service, preparing tensors for the model, executing model inference, and formatting the output histogram.
+        *   `model_serving/schemas.py`: Defines Pydantic models for request and response validation, ensuring data integrity at the API boundary.
+    *   **Model Loading & Fallback to Dummy Mode:**
+        *   `model_serving/mlflow_loader.py`: This module is responsible for loading the trained model (e.g., `LSTMTCNHistogramPredictor`) and its associated mappings (FIPS codes, crop types to IDs) from an MLflow Model Registry.
+        *   A key feature is its **graceful fallback mechanism**. If the MLflow server is unavailable, or if the specified model/artifacts cannot be loaded, the service automatically defaults to using a `DummyLSTMTCNHistogramPredictor` (defined in `model_training/model.py`). This ensures service availability for testing and development even without a live MLflow backend.
+    *   **On-the-Fly Dummy Asset Generation:**
+        *   The `model_serving/entrypoint.sh` script is executed when the Docker container starts.
+        *   It calls `model_training/generate_dummy_assets.py`, which creates the necessary dummy model state file (`dummy_model_state.pth`) and dummy mapping files (`fips_to_id_mapping.json`, `crop_to_id_mapping.json`) directly within the container (typically in `/app/dummy_assets`).
+        *   This internal generation ensures that the fallback mechanism works seamlessly without needing pre-existing dummy files to be mounted from the host system.
+    *   **Containerization & Configuration:**
+        *   The service is containerized using `model_serving/Dockerfile`. This Dockerfile sets up the Python environment, copies the application code (including the asset generation tools from `model_training/`), and defines the `entrypoint.sh` as the startup command.
+        *   Configuration parameters (MLflow URI, Feature Service URL, dummy mode flags, paths to dummy assets like `MLFLOW_DUMMY_MODEL_PATH`) are managed via environment variables. These are set in Docker Compose files (`docker-compose.yml`, `docker-compose.dummy.yml`) and can be customized further using `.env` files.
+    *   **Performance Goals & Basic Monitoring:**
+        *   The service aims for a sub-2-second response time for single predictions and targets support for at least 10 concurrent users.
+        *   Model accuracy is evaluated post-training using standard metrics (RMSE, MAE, R²).
+        *   Basic monitoring for significant input data changes (data drift) is planned to ensure model reliability over time.
 6.  *Unit Requirements Satisfied:* Unit 6: API for serving, Docker/K8s deployment; Unit 7: Offline evaluation, basic load testing, simple monitoring and feedback loop.
 7.  *Difficulty Points Attempted:* *Unit 7: Monitor for data drift.* Added basic data drift detection and seasonal performance checks to catch problems early.
 
 #### Data pipeline
 
-1.  *Strategy:* We store the CropNet dataset on Chameleon’s persistent storage and access it during training and evaluation. We simulate online data access with a script that fetches features based on county and year. A simple dashboard will help us visualize the data and model predictions.
+1.  *Strategy:* We store the CropNet dataset on Chameleon's persistent storage and access it during training and evaluation. We simulate online data access with a script that fetches features based on county and year. A simple dashboard will help us visualize the data and model predictions.
 2.  *Diagram Parts:* Persistent Storage, Docker containers running training or data services, DataLoader code, Feature fetch script, Dashboard service.
 3.  *Justification:* Handling a large dataset like CropNet requires fast and reliable storage and loading. The online simulation checks that the model can retrieve the right features, and the dashboard makes the data easier to understand and debug.
 4.  *Lecture Link:* Covers Unit 8 (Storage on Chameleon, ETL/loading for training, simulating online data access).
