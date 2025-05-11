@@ -50,9 +50,9 @@ def main():
 
     # 3) MLflow logging
     if args.mlflow:
-        tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:8000")
-        experiment_name = os.environ.get("MLFLOW_EXPERIMENT_NAME", "CropYieldMulticrop")
-        model_name = os.environ.get("MLFLOW_MODEL_NAME", "CropYieldModel")
+        tracking_uri = os.environ["MLFLOW_TRACKING_URI"]
+        experiment_name = os.environ["MLFLOW_EXPERIMENT_NAME"]
+        model_name = os.environ["MLFLOW_MODEL_NAME"]
 
         mlflow.set_tracking_uri(tracking_uri)
         mlflow.set_experiment(experiment_name)
