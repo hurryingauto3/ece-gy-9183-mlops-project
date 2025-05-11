@@ -25,8 +25,8 @@ import mlflow.tracking # To get client for artifact download if needed
 # Import components from your local package
 # Ensure correct relative imports
 from .swift_data_loader import SwiftCropYieldDataset, WEATHER_FEATURE_COLUMNS # Import dataset and expected columns
-from .model import LSTMTCNRegressor # Import model definition
-from .utils import get_dataloaders_by_year, train_model, evaluate_model, collate_fn # Import helper functions
+from ..model import LSTMTCNRegressor # Import model definition
+from ..utils import get_dataloaders_by_year, train_model, evaluate_model, collate_fn # Import helper functions
 
 
 # --- Configuration with Pydantic Settings ---
