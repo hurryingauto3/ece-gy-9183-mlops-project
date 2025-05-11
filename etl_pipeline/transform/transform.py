@@ -89,114 +89,49 @@ def preprocess_hrrr_all_months(file_paths):
     return agg_df
 
 # --- Preprocess USDA Yield Files ---
-def process_weather_data():
-    hrrr_base = Path(raw_data_root) / "WRF-HRRR Computed dataset" / "data"
-    logger.info(f"HRRR base path: {hrrr_base}")
+def preprocess_usda_data(path, crop_name):
+    try:
+        df = pd.read_csv(path)
 
-    if not hrrr_base.exists():
-        logger.warning("No HRRR data found.")
-        return
+        df.rename(columns={
+            "commodity_desc": "Crop Type",
+            "year": "Year",
+            "state_ansi": "State ANSI",
+            "county_ansi": "County ANSI"
+        }, inplace=True)
 
-    for year_dir in sorted(hrrr_base.iterdir()):
-        if not year_dir.is_dir():
-            continue
-        year = year_dir.name
-        logger.info(f"=== Processing Year: {year} ===")
+        crop_key = commodity_map.get(crop_name, crop_name).lower()
+        df_filtered = df[df["Crop Type"].str.lower() == crop_key]
 
-        for state_dir in sorted(year_dir.iterdir()):
-            if not state_dir.is_dir():
-                continue
-            csv_files = list(state_dir.glob("*.csv"))
-            logger.info(f"  State={state_dir.name}, CSV files found: {len(csv_files)}")
+        # Try to find yield column dynamically
+        yield_col = None
+        for col in df_filtered.columns:
+            if "yield" in col.lower() and "acre" in col.lower():
+                yield_col = col
+                break
 
-            if not csv_files:
-                continue
+        if not yield_col:
+            logger.error(f"Yield column not found in file: {path}")
+            logger.error(f"Available columns: {list(df_filtered.columns)}")
+            return {}
 
-            try:
-                df = preprocess_hrrr_all_months(csv_files)
-                if df is None or df.empty:
-                    logger.warning(f"  No valid data for state: {state_dir.name}")
-                    continue
+        # Normalize column name
+        df_filtered.rename(columns={yield_col: "Yield"}, inplace=True)
+        df_filtered.dropna(inplace=True)
 
-                for fips_code in df["FIPS"].unique():
-                    fips_df = df[df["FIPS"] == fips_code]
-                    save_weather_data(fips_df, str(fips_code), year)
+        yield_by_fips = defaultdict(list)
+        for _, row in df_filtered.iterrows():
+            fips = f"{int(row['State ANSI']):02d}{int(row['County ANSI']):03d}"
+            yield_by_fips[fips].append({
+                "year": int(row["Year"]),
+                "yield": row["Yield"]
+            })
 
-            except Exception as e:
-                logger.error(f"  Failed processing state={state_dir.name}, year={year}: {e}")
+        return yield_by_fips
 
-        logger.info(f"=== Finished Year: {year} ===\n")
-
-
-def preprocess_hrrr_all_months(file_paths):
-    dfs = []
-    for path in file_paths:
-        if os.path.isdir(path):
-            logger.warning(f"Directory instead of file: {path}")
-            continue
-        try:
-            df = pd.read_csv(path)
-            dfs.append(df)
-        except Exception as e:
-            logger.error(f"Failed to read HRRR file {path}: {e}")
-
-    if not dfs:
-        return None
-
-    df_all = pd.concat(dfs, ignore_index=True)
-
-    df_all.rename(columns={
-        'FIPS Code': 'FIPS',
-        'Avg Temperature (K)': 'Avg Temp (K)',
-        'Max Temperature (K)': 'Max Temp (K)',
-        'Min Temperature (K)': 'Min Temp (K)',
-        'Precipitation (kg m**-2)': 'Precip (kg/m²)',
-        'Relative Humidity (%)': 'Humidity (%)',
-        'Wind Gust (m s**-1)': 'Wind Gust (m/s)',
-        'Wind Speed (m s**-1)': 'Wind Speed (m/s)',
-        'U Component of Wind (m s**-1)': 'U Wind (m/s)',
-        'V Component of Wind (m s**-1)': 'V Wind (m/s)',
-        'Downward Shortwave Radiation Flux (W m**-2)': 'Solar Flux (W/m²)',
-        'Vapor Pressure Deficit (kPa)': 'VPD (kPa)'
-    }, inplace=True)
-
-    # Fill missing weather values using average of ffill and bfill
-    weather_cols = [
-        'Avg Temp (K)', 'Max Temp (K)', 'Min Temp (K)', 'Precip (kg/m²)',
-        'Humidity (%)', 'Wind Gust (m/s)', 'Wind Speed (m/s)',
-        'U Wind (m/s)', 'V Wind (m/s)', 'Solar Flux (W/m²)', 'VPD (kPa)'
-    ]
-
-    df_ffill = df_all[weather_cols].ffill()
-    df_bfill = df_all[weather_cols].bfill()
-    df_all[weather_cols] = ((df_ffill + df_bfill) / 2)
-
-    # Drop critical missing values before aggregation
-    df_all.dropna(subset=["FIPS", "Year", "Month", "Day"], inplace=True)
-
-    agg_df = df_all.groupby(["FIPS", "Year", "Month", "Day"]).agg({
-        'Avg Temp (K)': 'mean',
-        'Max Temp (K)': 'max',
-        'Min Temp (K)': 'min',
-        'Precip (kg/m²)': ['mean', 'min', 'max'],
-        'Humidity (%)': ['mean', 'min', 'max'],
-        'Wind Gust (m/s)': ['mean', 'min', 'max'],
-        'Wind Speed (m/s)': ['mean', 'min', 'max'],
-        'U Wind (m/s)': ['mean', 'min', 'max'],
-        'V Wind (m/s)': ['mean', 'min', 'max'],
-        'Solar Flux (W/m²)': ['mean', 'min', 'max'],
-        'VPD (kPa)': ['mean', 'min', 'max'],
-    })
-
-    # Flatten multi-index columns
-    agg_df.columns = [' '.join(col).strip() for col in agg_df.columns.values]
-    agg_df = agg_df.reset_index()
-
-    # Cast date columns to int cleanly
-    agg_df[["Year", "Month", "Day"]] = agg_df[["Year", "Month", "Day"]].astype(int)
-
-    return agg_df
-
+    except Exception as e:
+        logger.error(f"Error preprocessing USDA data at {path}: {e}")
+        return {}
 
 
 # --- Save Weather ---
@@ -204,8 +139,13 @@ def save_weather_data(df, fips_code, year):
     out_dir = Path(transformed_data_root) / fips_code / str(year)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"WeatherTimeSeries{year}.csv"
+
+    # Reformat FIPS column to 5-digit string
+    df["FIPS"] = df["FIPS"].astype(int).apply(lambda x: f"{x:05d}")
+
     df.to_csv(out_path, index=False)
     logger.info(f"Saved weather data: {out_path}")
+
 
 # --- Save Crop Yield ---
 def save_crop_yield(fips_code, crop, new_records):
@@ -234,7 +174,32 @@ def save_crop_yield(fips_code, crop, new_records):
     logger.info(f"Updated yield data: {out_path}")
 
 # --- HRRR Processor ---
+def process_weather_data():
+    hrrr_base = Path(raw_data_root) / "WRF-HRRR Computed dataset" / "data"
+    print(hrrr_base)
+    if not hrrr_base.exists():
+        logger.warning("No HRRR data found.")
+        return
 
+    for year_dir in hrrr_base.iterdir():
+        if not year_dir.is_dir():
+            continue
+        year = year_dir.name
+        for state_dir in year_dir.iterdir():
+            if not state_dir.is_dir():
+                continue
+            csv_files = list(state_dir.glob("*.csv"))
+            if not csv_files:
+                continue
+
+            logger.info(f"Processing HRRR: Year={year}, State={state_dir.name}")
+            df = preprocess_hrrr_all_months(csv_files)
+            if df is None:
+                continue
+
+            for fips_code in df["FIPS"].unique():
+                fips_df = df[df["FIPS"] == fips_code]
+                save_weather_data(fips_df, str(fips_code), year)
 
 # --- USDA Processor ---
 def process_usda_data():
