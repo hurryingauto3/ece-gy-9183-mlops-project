@@ -146,6 +146,119 @@ services:
       - prometheus
       - mlflow  # Added dependency on mlflow service
 
+
+# --- ETL Job Service ---
+
+  # etl-download:
+  #   build: ./etl_pipeline/extract
+  #   container_name: etl-extract-container
+  #   volumes:
+  #     # - ./local_data:/app/data_lake
+  #     # - /mnt/persistent/data_lake:/app/data_lake  # use persistent storage
+  #     - /home/cc/swift_s3:/mnt/swift_store
+  #   # Add this command section:
+  #   command:
+  #     - poetry
+  #     - run
+  #     - python # Or /usr/local/bin/python3 depending on your base image/install
+  #     - /app/drive_to_swift_etl.py # Path to your script inside the container
+  #     - ${GOOGLE_DRIVE_FOLDER_ID_HRRR} # Positional argument folder_id
+  #     - ${GOOGLE_DRIVE_FOLDER_ID_USDA} 
+  #     # - --swift-container # Named argument flag
+  #     # - ${FS_OPENSTACK_SWIFT_CONTAINER_NAME} # Named argument value
+  #     - --clean # Optional: Add --clean flag if you want it to clean up locally
+
+  #   environment:
+  #     # Explicitly pass OpenStack credentials to the container
+  #     # These are needed by the openstack SDK within the script
+  #     - OS_AUTH_URL=${OS_AUTH_URL}
+  #     - OS_AUTH_TYPE=${OS_AUTH_TYPE}
+  #     - OS_APPLICATION_CREDENTIAL_ID=${OS_APPLICATION_CREDENTIAL_ID}
+  #     - OS_APPLICATION_CREDENTIAL_SECRET=${OS_APPLICATION_CREDENTIAL_SECRET}
+  #     - OS_REGION_NAME=${OS_REGION_NAME}
+  #     # Pass the container name as env var as well, useful for debugging
+  #     # although the script reads it from command line via compose args
+  #     # - FS_OPENSTACK_SWIFT_CONTAINER_NAME=${FS_OPENSTACK_SWIFT_CONTAINER_NAME}
+  #     # Pass the folder ID as env var as well, useful for debugging
+  #     - GOOGLE_DRIVE_FOLDER_ID_HRRR=${GOOGLE_DRIVE_FOLDER_ID_HRRR}
+  #     - GOOGLE_DRIVE_FOLDER_ID_USDA=${GOOGLE_DRIVE_FOLDER_ID_USDA}
+
+  # etl-transform:
+  #   profiles: ["gpu"]
+  #   build: ./etl_pipeline/transform
+  #   container_name: etl-transform-container
+  #   volumes:
+  #     # - ./local_data:/app/data_lake  # Fetch data from local VM storage
+  #     # - persistent_data:/mnt/project4/data
+  #     - /mnt/persistent/data_lake:/app/data_lake
+  #     - /mnt/persistent/project4/data:/mnt/project4/data
+  #   # Add this command section:
+  #   command:
+  #     - poetry
+  #     - run
+  #     - python # Or /usr/local/bin/python3 depending on your base image/install
+  #     - /app/transform.py # Path to your script inside the container
+  #     - --swift-container # Named argument flag
+  #     - ${FS_OPENSTACK_SWIFT_CONTAINER_NAME} # Named argument value
+  #     - --clean # Optional: Add --clean flag if you want it to clean up locally
+
+  #   environment:
+  #     # Explicitly pass OpenStack credentials to the container
+  #     # These are needed by the openstack SDK within the script
+  #     - OS_AUTH_URL=${OS_AUTH_URL}
+  #     - OS_AUTH_TYPE=${OS_AUTH_TYPE}
+  #     - OS_APPLICATION_CREDENTIAL_ID=${OS_APPLICATION_CREDENTIAL_ID}
+  #     - OS_APPLICATION_CREDENTIAL_SECRET=${OS_APPLICATION_CREDENTIAL_SECRET}
+  #     - OS_REGION_NAME=${OS_REGION_NAME}
+  #     # Pass the container name as env var as well, useful for debugging
+  #     # although the script reads it from command line via compose args
+  #     - FS_OPENSTACK_SWIFT_CONTAINER_NAME=${FS_OPENSTACK_SWIFT_CONTAINER_NAME}
+  #     # Pass the folder ID as env var as well, useful for debugging
+
+
+  # --- Model Training Job Service ---
+  # model-training:
+  #   profiles: ["gpu"]
+  #   build:
+  #     context: ./model_training
+  #     dockerfile: Dockerfile
+  #   container_name: model-training-container
+  #   restart: "no"
+  #   environment:
+  #     # MLflow config
+  #     - MLFLOW_TRACKING_URI=http://mlflow:5001
+  #     - MLFLOW_MODEL_NAME=${MLFLOW_MODEL_NAME}
+  #     - MLFLOW_MODEL_STAGE=${MLFLOW_MODEL_STAGE}
+  #     - MLFLOW_EXPERIMENT_NAME=${MLFLOW_EXPERIMENT_NAME}
+
+  #     # Pass standard OpenStack OS_* variables required by openstack.connect() (for data loading)
+  #     # using Application Credentials
+  #     - OS_AUTH_URL=${OS_AUTH_URL}
+  #     - OS_AUTH_TYPE=${OS_AUTH_TYPE}
+  #     - OS_APPLICATION_CREDENTIAL_ID=${OS_APPLICATION_CREDENTIAL_ID}
+  #     - OS_APPLICATION_CREDENTIAL_SECRET=${OS_APPLICATION_CREDENTIAL_SECRET}
+  #     # Include Project ID and Region Name
+  #     # - OS_PROJECT_ID=${OS_PROJECT_ID}
+  #     - OS_REGION_NAME=${OS_REGION_NAME} # Optional
+
+  #     # Your script specific variable (Swift container name for data)
+  #     - FS_OPENSTACK_SWIFT_CONTAINER_NAME=${FS_OPENSTACK_SWIFT_CONTAINER_NAME}
+
+  #     # Pass training hyperparameters (use placeholders reading from .env or shell)
+  #     # Defaults are set in train_job.py, but explicit variables are clearer
+  #     - TRAIN_EPOCHS=${TRAIN_EPOCHS:-50}
+  #     - TRAIN_LR=${TRAIN_LR:-1e-3}
+  #     - TRAIN_BATCH_SIZE=${TRAIN_BATCH_SIZE:-32}
+  #     - TRAIN_FIPS_EMBEDDING_DIM=${TRAIN_FIPS_EMBEDDING_DIM:-16}
+  #     - TRAIN_HIDDEN_DIM=${TRAIN_HIDDEN_DIM:-64}
+  #     - TRAIN_LSTM_LAYERS=${TRAIN_LSTM_LAYERS:-1}
+  #     - TRAIN_TCN_CHANNELS=${TRAIN_TCN_CHANNELS:-64,32}
+  #     - TRAIN_DROPOUT_RATE=${TRAIN_DROPOUT_RATE:-0.1}
+  #     - TRAIN_HOLDOUT_YEAR=${TRAIN_HOLDOUT_YEAR:-}
+  #     - TRAIN_VAL_YEAR_RATIO=${TRAIN_VAL_YEAR_RATIO:-0.2}
+  #     - TRAIN_CROP_NAME=${TRAIN_CROP_NAME:-corn}
+
+
 # Define named volumes for data persistence
 volumes:
   mlflow_tracking_data:

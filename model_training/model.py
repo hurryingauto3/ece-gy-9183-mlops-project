@@ -1,4 +1,3 @@
-# model.py
 import torch
 import torch.nn as nn
 import structlog # Added for logger
@@ -43,6 +42,7 @@ class LSTMTCNHistogramPredictor(nn.Module):
                        nn.ReLU(),
                        nn.Dropout(dropout_rate)]
             in_ch = out_ch
+
         self.tcn = nn.Sequential(*layers)
         self.pool = nn.AdaptiveAvgPool1d(1)
         
