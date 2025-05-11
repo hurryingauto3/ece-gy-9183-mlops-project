@@ -89,7 +89,6 @@ def preprocess_hrrr_all_months(file_paths):
     return agg_df
 
 # --- Preprocess USDA Yield Files ---
-                break
 def process_weather_data():
     hrrr_base = Path(raw_data_root) / "WRF-HRRR Computed dataset" / "data"
     logger.info(f"HRRR base path: {hrrr_base}")
