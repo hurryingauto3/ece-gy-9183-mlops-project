@@ -38,5 +38,26 @@ sudo systemctl restart docker
 # Verify GPU visibility:
 docker run --rm --gpus all nvidia/cuda:12.4-base nvidia-smi
 ```
+Now to launch the jupyter container:
+
+```bash
+cd chameleon_devops
+
+# Pull & launch ONLY the torchnb service under the "gpu" profile
+docker compose pull torchnb
+docker compose up -d --profile gpu torchnb
+
+```
+
+should probably see something like:
+```bash
+Pulling torchnb   ... done
+Creating torchnb ... done
+```
+
+then you can just get the notebook's access token, ive simplified the command (on the GPU server) :
+```bash
+docker logs torchnb | grep http://127.0.0.1:8888
+```
 
 

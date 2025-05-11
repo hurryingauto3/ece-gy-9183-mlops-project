@@ -87,6 +87,30 @@ services:
     networks:
       - backend
 
+  torchnb:
+    image: quay.io/jupyter/pytorch-notebook:cuda12-pytorch-2.5.1
+    container_name: torchnb
+    # exposes Jupyter on 8888 inside the GPU reservation
+    ports:
+      - "8888:8888"
+    # give it access to your model_training code so you can open notebooks there
+    volumes:
+      - ./model_training:/home/jovyan/work
+    # run on the GPU profile
+    profiles: ["gpu"]
+    # request one Nvidia GPU via the same mechanism your mlflow service uses
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    # start after mlflow so your experiments can log if needed
+    depends_on:
+      - mlflow
+
+  
 networks:
   backend:
     driver: bridge
