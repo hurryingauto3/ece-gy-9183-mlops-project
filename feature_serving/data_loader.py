@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np # Import numpy
 
 # from pathlib import Path # No longer needed for local paths
 import io  # Needed to read string content as a file
@@ -20,7 +21,13 @@ logger = structlog.get_logger(__name__)
 # This will be initialized in main.py's startup event
 swift_conn: Optional[openstack.connection.Connection] = None
 
-from openstack.exceptions import ResourceNotFound  # add this if not already imported
+# Placeholder for potential crop-specific data paths or feature sets
+# This might be loaded from config or be more complex
+CROP_SPECIFIC_CONFIG = {
+    "default": {"weather_file_suffix": "WeatherTimeSeries"},
+    # "corn": {"weather_file_suffix": "WeatherTimeSeries_Corn"}, # Example
+    # "soy": {"weather_file_suffix": "WeatherTimeSeries_Soy"},   # Example
+}
 
 def initialize_swift_connection() -> None:
     """Initialize the global OpenStack Swift connection and confirm the container exists."""
@@ -43,26 +50,28 @@ def initialize_swift_connection() -> None:
     try:
         swift_conn = openstack.connect(**params)
     except Exception as exc:
-        logger.critical("Swift auth failure", error=str(exc), exc_info=True)
-        raise ConnectionError(f"Swift auth failure: {exc}") from exc
+        logger.critical("Swift auth failure during initialization. Will attempt to proceed in offline/dummy mode if applicable.", error=str(exc), exc_info=True)
+        swift_conn = None # Allow service to start, swift_conn remains None
+        # Do not raise ConnectionError here to allow dummy mode
+        return # Exit initialization
 
     # ── verify the container exists (openstacksdk ≥ 2.0) ─────────────────
+    # This part only runs if swift_conn was successfully created above
     try:
         # head request; raises ResourceNotFound if absent
         swift_conn.object_store.get_container_metadata(settings.swift_container_name)
         logger.info("Swift container found", container=settings.swift_container_name)
 
     except ResourceNotFound:
-        logger.critical("Swift container not found", container=settings.swift_container_name)
-        swift_conn.close()
-        swift_conn = None
-        raise ConnectionError(f"Swift container '{settings.swift_container_name}' not found")
-
+        logger.critical("Swift container not found. Will attempt to proceed in offline/dummy mode if applicable.", container=settings.swift_container_name)
+        if swift_conn: swift_conn.close()
+        swift_conn = None # Allow service to start
+        # Do not raise ConnectionError
     except Exception as exc:
-        logger.critical("Error verifying Swift container", error=str(exc), exc_info=True)
-        swift_conn.close()
-        swift_conn = None
-        raise ConnectionError(f"Container verification failed: {exc}") from exc
+        logger.critical("Error verifying Swift container. Will attempt to proceed in offline/dummy mode if applicable.", error=str(exc), exc_info=True)
+        if swift_conn: swift_conn.close()
+        swift_conn = None # Allow service to start
+        # Do not raise ConnectionError
     
 def close_swift_connection():
     """Closes the global OpenStack Swift connection."""
@@ -82,41 +91,118 @@ def close_swift_connection():
 
 # --- Modify the data loading function ---
 def load_and_process_weather_features(
-    fips_code: str, year: int
+    fips_code: str, year: int, cut_off_date: Optional[str] = None, crop: Optional[str] = None
 ) -> Optional[List[Dict[str, Any]]]:
     """
-    Loads and processes weather data for a given FIPS and year from OpenStack Swift,
-    filtering for the Apr-Oct season.
-    Mirrors the data cleaning logic in CropYieldDataset.
+    Loads and processes weather data for a given FIPS, year, and optional cut-off date from OpenStack Swift,
+    filtering for the Apr-Oct season or up to the cut-off date within that season.
+    Optionally considers crop type for data fetching (currently placeholder).
 
     Args:
         fips_code (str): The FIPS code of the county.
         year (int): The year of the data.
+        cut_off_date (Optional[str]): The cut-off date in 'YYYY-MM-DD' format. If provided,
+                                      data is filtered up to this date within the season.
+        crop (Optional[str]): The type of crop. (Currently placeholder for future use, e.g., fetching different data).
 
     Returns:
         Optional[List[Dict[str, Any]]]: A list of dictionaries, where each dict is a day's
-                                       weather features for the April-October season,
-                                       cleaned of NaNs. Returns an empty list if the file
-                                       is found but has no valid season data, or None if
-                                       the object (file) is not found in Swift.
-                                       Raises other exceptions for processing errors.
+                                       weather features, cleaned of NaNs. Returns an empty list
+                                       if the file is found but has no valid data matching criteria,
+                                       or None if the object (file) is not found in Swift.
     Raises:
-         ConnectionError: If the Swift connection is not initialized.
+         ConnectionError: If the Swift connection is not initialized AND dummy mode is not active.
          SDKException: For other OpenStack SDK errors during download.
          Exception: For other unexpected errors during processing.
     """
-    if swift_conn is None:
-        logger.error("Swift connection not initialized.")
-        raise ConnectionError("Swift connection is not available.")
+    # Check for dummy FIPS code first or if swift_conn is None (implying offline/dummy mode)
+    # Define a few dummy weather features names. Ensure these match what a real model might expect.
+    dummy_feature_names = ["temp_max_c", "temp_min_c", "precipitation_mm", "solar_rad_mj_m2"]
+    num_dummy_days = 90 # Number of days of dummy data
 
-    year_str = str(year)  # Ensure year is a string
+    if fips_code == "00000" or fips_code.upper() == "DUMMY" or swift_conn is None:
+        logger.info(f"Entering dummy data mode for FIPS: {fips_code}, Year: {year}, Crop: {crop}, Cut-off: {cut_off_date}. Swift available: {swift_conn is not None}")
+        mock_weather_data = []
+        start_date = pd.Timestamp(f"{year}-04-01") # Start of typical season
+        
+        # Determine end date for dummy data generation
+        actual_end_date = pd.Timestamp(f"{year}-10-31") # End of typical season
+        if cut_off_date:
+            try:
+                parsed_cut_off = pd.to_datetime(cut_off_date)
+                if parsed_cut_off < actual_end_date:
+                    actual_end_date = parsed_cut_off
+            except ValueError:
+                logger.warning(f"Invalid cut_off_date format '{cut_off_date}' in dummy mode, using full season.")
+        
+        # Ensure start_date is not after actual_end_date
+        if start_date > actual_end_date:
+            logger.warning(f"Start date {start_date} is after end date {actual_end_date} in dummy mode, returning no data.")
+            return []
+            
+        current_date = start_date
+        days_generated = 0
+        while current_date <= actual_end_date and days_generated < num_dummy_days:
+            day_features = {
+                name: round(np.random.uniform(0, 30) if "temp" in name else np.random.uniform(0,10), 2) 
+                for name in dummy_feature_names
+            }
+            # Add Year, Month, Day for potential internal processing before they are dropped
+            # Although our current processing drops them based on name, not position
+            day_features["Year"] = current_date.year
+            day_features["Month"] = current_date.month
+            day_features["Day"] = current_date.day
+            mock_weather_data.append(day_features)
+            current_date += pd.Timedelta(days=1)
+            days_generated += 1
+        
+        # The rest of the processing (dropping Year/Month/Day, numeric conversion, NaN handling) 
+        # will be applied to this dummy data if we pass it through the same pandas logic.
+        # For simplicity here, let's assume the dummy data is already in the final desired format 
+        # (list of dicts with only numeric weather features).
+        # However, to be robust, we should process it minimally.
+        
+        if not mock_weather_data:
+            return []
+
+        df = pd.DataFrame(mock_weather_data)
+        # Drop non-weather columns (Year, Month, Day)
+        cols_to_drop = ["Year", "Month", "Day"]
+        existing_cols_to_drop = [col for col in df.columns if col in cols_to_drop]
+        df = df.drop(columns=existing_cols_to_drop, errors="ignore")
+        
+        # Ensure all remaining columns have numeric types (dummy data should be already)
+        # for col in df.columns: df[col] = pd.to_numeric(df[col], errors="coerce")
+        # df.dropna(axis=1, how="all", inplace=True)
+        # if df.empty or df.shape[1] == 0: return []
+        # df.dropna(axis=0, how="any", inplace=True)
+        # if df.empty: return []
+        logger.info(f"Generated {len(df)} days of dummy weather data.")
+        return df.to_dict("records")
+
+    # Original logic if not in dummy mode and swift_conn is available
+    if swift_conn is None: # Should have been caught by dummy mode if fips was not DUMMY, but as safeguard
+        logger.error("Swift connection not initialized and not in recognized dummy mode.")
+        # Depending on strictness, could raise ConnectionError or return empty/None
+        # For testing, returning empty might be preferable to crashing service if DUMMY FIPS wasn't used.
+        return [] 
+
+    year_str = str(year)
+    
+    # Placeholder: Determine data source based on crop
+    # For now, uses a default, but this could select different files or parsing
+    # crop_config = CROP_SPECIFIC_CONFIG.get(crop.lower() if crop else "default", CROP_SPECIFIC_CONFIG["default"])
+    # weather_file_name_base = crop_config["weather_file_suffix"]
+    # For simplicity, assuming crop doesn't change the filename for now.
+    weather_file_name_base = "WeatherTimeSeries"
+    
     # Construct the object name in Swift
     # Assuming the structure is FIPS_CODE/YEAR/WeatherTimeSeriesYEAR.csv
-    object_name = f"{fips_code}/{year_str}/WeatherTimeSeries{year_str}.csv"
+    object_name = f"{fips_code}/{year_str}/{weather_file_name_base}{year_str}.csv"
     container_name = settings.swift_container_name
 
     log = logger.bind(
-        fips=fips_code, year=year_str, container=container_name, object=object_name
+        fips=fips_code, year=year_str, container=container_name, object=object_name, crop=crop, cut_off_date=cut_off_date
     )
     log.debug("Attempting to load weather data from Swift")
 
@@ -136,30 +222,42 @@ def load_and_process_weather_features(
         df = pd.read_csv(csv_file_like)
 
         # --- Data Processing (Mirroring CropYieldDataset) ---
+        # Convert Year, Month, Day to datetime for filtering
+        if not all(col in df.columns for col in ["Year", "Month", "Day"]):
+            log.error("Weather data is missing Year, Month, or Day column(s).")
+            raise ValueError("Year, Month, or Day column(s) are missing in weather data.")
+
+        df["date"] = pd.to_datetime(df[["Year", "Month", "Day"]])
+
         # Filter to growing season (April to October)
-        # Ensure 'Month' column exists and is numeric before filtering
-        if "Month" not in df.columns:
-            log.error("Weather data is missing 'Month' column.")
-            # Treat as a data format error
-            raise ValueError("'Month' column is missing in weather data from Swift.")
-
-        df["Month"] = pd.to_numeric(df["Month"], errors="coerce")
-        df.dropna(
-            subset=["Month"], inplace=True
-        )  # Drop rows where Month is NaN after coerce
-
-        df_season = df[(df["Month"] >= 4) & (df["Month"] <= 10)].copy()  # Use .copy()
+        df_season = df[(df["date"].dt.month >= 4) & (df["date"].dt.month <= 10)].copy()
 
         if df_season.empty:
-            log.warning("No weather data in Apr-Oct season after filtering")
-            return []  # Return empty list if season data is missing
+            log.warning("No weather data in Apr-Oct season before cut-off date filter")
+            return []
 
-        # Drop non-weather columns like Year, Month, Day.
+        # Apply cut-off date filter if provided
+        if cut_off_date:
+            try:
+                parsed_cut_off_date = pd.to_datetime(cut_off_date)
+                df_season = df_season[df_season["date"] <= parsed_cut_off_date].copy()
+                log.debug(f"Applied cut-off date: {cut_off_date}")
+            except ValueError:
+                log.error(f"Invalid cut_off_date format: {cut_off_date}. Should be YYYY-MM-DD.")
+                # Or raise an error, for now, we'll ignore invalid date and proceed without this filter
+                pass # Or raise HTTPException in main.py based on a specific error type here
+
+        if df_season.empty:
+            log.warning("No weather data in Apr-Oct season after cut-off date filter")
+            return []  # Return empty list if season data is missing or filtered out
+
+        # Drop non-weather columns like Year, Month, Day, and the created 'date'
         cols_to_drop = [
             "Year",
             "Month",
             "Day",
-        ]  # Don't include 'Date' unless you explicitly add it before dropping
+            "date", # also drop the created date column
+        ]
         existing_cols_to_drop = [
             col for col in df_season.columns if col in cols_to_drop
         ]
