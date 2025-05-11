@@ -87,8 +87,8 @@ services:
   model-serving:
     profiles: ["services"]
     build:
-      context: ./model_serving
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: model_serving/Dockerfile
     container_name: model-serving-container
     ports:
       - "8000:8000"
@@ -97,6 +97,19 @@ services:
       - MLFLOW_TRACKING_URI=http://mlflow:5001
       - MLFLOW_MODEL_NAME=${MLFLOW_MODEL_NAME}
       - MLFLOW_MODEL_STAGE=${MLFLOW_MODEL_STAGE}
+      
+      # --- MLflow Dummy Mode Configuration (for fallback if MLflow is unavailable) ---
+      # DUMMY_MODE is false by default; fallback to dummy assets happens if MLflow load fails.
+      # Set MLFLOW_DUMMY_MODE=true in .env to force dummy mode.
+      - MLFLOW_DUMMY_MODE=${MLFLOW_DUMMY_MODE:-false}
+      # Paths for assets generated INSIDE the container by entrypoint.sh
+      - MLFLOW_DUMMY_MODEL_PATH=/app/dummy_assets/dummy_model_state.pth
+      - MLFLOW_DUMMY_FIPS_MAPPING_PATH=/app/dummy_assets/fips_to_id_mapping.json
+      - MLFLOW_DUMMY_CROP_MAPPING_PATH=/app/dummy_assets/crop_to_id_mapping.json
+      - MLFLOW_DUMMY_MODEL_NUM_BINS=${MLFLOW_DUMMY_MODEL_NUM_BINS:-5} # Can be overridden by .env
+      # Directory for the asset generation script
+      - DUMMY_ASSETS_DIR=/app/dummy_assets
+
       # API Settings
       - API_PREDICT_LIMIT=${API_PREDICT_LIMIT}
       - API_PREDICT_BATCH_LIMIT=${API_PREDICT_BATCH_LIMIT}
