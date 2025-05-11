@@ -198,6 +198,7 @@ def process_weather_data():
                 continue
 
             for fips_code in df["FIPS"].unique():
+                df["FIPS"] = df["FIPS"].astype(int).apply(lambda x: f"{x:05d}")
                 fips_df = df[df["FIPS"] == fips_code]
                 save_weather_data(fips_df, str(fips_code), year)
 
