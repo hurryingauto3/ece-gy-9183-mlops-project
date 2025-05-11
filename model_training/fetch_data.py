@@ -61,20 +61,26 @@ def process_fips_crop(fips_code: str,
         raise ValueError("No data found for any year.")
 
     yrs = sorted(frames.keys())
-    latest = yrs[-1]
-    train_years = yrs[:-1]
+    
+    if len(yrs) < 3:
+        raise ValueError("Need at least 3 years of data to split into train, eval, and test.")
 
-    df_train = pd.concat([frames[y] for y in train_years], ignore_index=True) \
-               if train_years else pd.DataFrame()
+    latest = yrs[-1]
+    eval_year = yrs[-2]
+    train_years = yrs[:-2]
+
+    df_train = pd.concat([frames[y] for y in train_years], ignore_index=True)
+    df_eval  = frames[eval_year]
     df_test  = frames[latest]
 
+
     base = f"{fips_code}_{crop_name.lower()}"
-    if not df_train.empty:
-        df_train.to_csv(f"{output_dir}/{base}_training_data.csv", index=False)
-        print(f"[OK] wrote training_data.csv")
-    else:
-        print("[INFO] only one year present, no training file created")
+    df_train.to_csv(f"{output_dir}/{base}_training_data.csv", index=False)
+    df_eval.to_csv(f"{output_dir}/{base}_eval_data.csv", index=False)
     df_test.to_csv(f"{output_dir}/{base}_testing_data.csv", index=False)
+
+    print(f"[OK] wrote training_data.csv")
+    print(f"[OK] wrote eval_data.csv")
     print(f"[OK] wrote testing_data.csv")
 
 
