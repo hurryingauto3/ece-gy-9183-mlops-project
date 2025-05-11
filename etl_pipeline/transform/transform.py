@@ -55,9 +55,15 @@ def preprocess_hrrr_all_months(file_paths):
         'Downward Shortwave Radiation Flux (W m**-2)': 'Solar Flux (W/m²)',
         'Vapor Pressure Deficit (kPa)': 'VPD (kPa)'
     }, inplace=True)
-    df_all.dropna(subset=["FIPS", "Year", "Month", "Day"], inplace=True)
+   
+   # Drop rows with missing date components first
+    df_all.dropna(subset=["Year", "Month", "Day", "FIPS"], inplace=True)
+
+    # Then cast to int
     df_all[["Year", "Month", "Day"]] = df_all[["Year", "Month", "Day"]].astype(int)
     df_all["FIPS"] = df_all["FIPS"].astype(int).apply(lambda x: f"{x:05d}")
+
+   
     weather_cols = [
         'Avg Temp (K)', 'Max Temp (K)', 'Min Temp (K)', 'Precip (kg/m²)',
         'Humidity (%)', 'Wind Gust (m/s)', 'Wind Speed (m/s)',
