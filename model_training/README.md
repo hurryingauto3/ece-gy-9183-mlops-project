@@ -22,3 +22,24 @@ python train.py \
     --epochs 20 \
     --mlflow
 ```
+
+For train:
+
+```bash
+docker compose run model-training \
+  python model_training/train.py \
+    --train-csv model_training/input/12345_corn_training_data.csv \
+    --test-csv  model_training/input/12345_corn_testing_data.csv \
+    --epochs 50 \
+    --batch-size 32 \
+    --lr 1e-3 \
+    --mlflow
+```
+infer:
+```
+docker compose run model-training \
+  python model_training/inference.py \
+    --input-csv model_training/input/your_partial_season.csv \
+    --fips-id 0 \
+    --num-samples 500
+```
