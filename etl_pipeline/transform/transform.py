@@ -27,25 +27,20 @@ Path(transformed_data_root).mkdir(parents=True, exist_ok=True)
 def preprocess_hrrr_all_months(file_paths):
     dfs = []
     for path in file_paths:
-        try:
-            df = pd.read_csv(path)
-            dfs.append(df)
-        except Exception as e:
-            logger.error(f"Failed to read HRRR file {path}: {e}")
+      if os.path.isdir(path):
+        print(f"Directory found in list: {path}")
+        # try:
+      df = pd.read_csv(path)
+      dfs.append(df)
+        # except Exception as e:
+            # logger.error(f"Failed to read HRRR file {path}: {e}")
 
     if not dfs:
         return None
 
     df_all = pd.concat(dfs, ignore_index=True)
 
-    df_clean = df_all[[
-        'Year', 'Month', 'Day', 'FIPS Code',
-        'Avg Temperature (K)', 'Max Temperature (K)', 'Min Temperature (K)',
-        'Precipitation (kg m**-2)', 'Relative Humidity (%)',
-        'Wind Gust (m s**-1)', 'Wind Speed (m s**-1)'
-    ]].dropna()
-
-    df_clean.rename(columns={
+    df_all.rename(columns={
         'FIPS Code': 'FIPS',
         'Avg Temperature (K)': 'Avg Temp (K)',
         'Max Temperature (K)': 'Max Temp (K)',
@@ -53,11 +48,35 @@ def preprocess_hrrr_all_months(file_paths):
         'Precipitation (kg m**-2)': 'Precip (kg/m²)',
         'Relative Humidity (%)': 'Humidity (%)',
         'Wind Gust (m s**-1)': 'Wind Gust (m/s)',
-        'Wind Speed (m s**-1)': 'Wind Speed (m/s)'
+        'Wind Speed (m s**-1)': 'Wind Speed (m/s)',
+        'U Component of Wind (m s**-1)': 'U Wind (m/s)',
+        'V Component of Wind (m s**-1)': 'V Wind (m/s)',
+        'Downward Shortwave Radiation Flux (W m**-2)': 'Solar Flux (W/m²)',
+        'Vapor Pressure Deficit (kPa)': 'VPD (kPa)'
     }, inplace=True)
-    df_clean["FIPS"] = df_clean["FIPS"].astype(int).apply(lambda x: f"{x:05d}")
+    int_columns = ['Day', 'Month', 'Year']
+    df[int_columns] = df[int_columns].astype(int)
+    df_all["FIPS"] = df_all["FIPS"].astype(int).apply(lambda x: f"{x:05d}")
 
-    return df_clean
+    agg_df = df_all.groupby(["FIPS", "Year", "Month", "Day"]).agg({
+        'Avg Temp (K)': 'mean',
+        'Max Temp (K)': 'max',
+        'Min Temp (K)': 'min',
+        'Precip (kg/m²)': ['mean', 'min', 'max'],
+        'Humidity (%)': ['mean', 'min', 'max'],
+        'Wind Gust (m/s)': ['mean', 'min', 'max'],
+        'Wind Speed (m/s)': ['mean', 'min', 'max'],
+        'U Wind (m/s)': ['mean', 'min', 'max'],
+        'V Wind (m/s)': ['mean', 'min', 'max'],
+        'Solar Flux (W/m²)': ['mean', 'min', 'max'],
+        'VPD (kPa)': ['mean', 'min', 'max'],
+    })
+
+    # Flatten multi-index columns
+    agg_df.columns = [' '.join(col).strip() for col in agg_df.columns.values]
+    agg_df = agg_df.reset_index()
+
+    return agg_df
 
 # --- Preprocess USDA Yield Files ---
 def preprocess_usda_data(path, crop_name):
