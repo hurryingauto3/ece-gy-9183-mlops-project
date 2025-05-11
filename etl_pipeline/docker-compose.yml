@@ -38,7 +38,7 @@ services:
   etl-transform:
     profiles: ["gpu"]
     build: ./transform
-    container_name: etl-transform-container
+    container_name: exqtl-transform-container
     volumes:
       # - ./local_data:/app/data_lake  # Fetch data from local VM storage
       # - persistent_data:/mnt/project4/data
