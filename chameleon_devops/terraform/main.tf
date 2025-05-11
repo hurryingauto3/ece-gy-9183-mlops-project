@@ -64,11 +64,16 @@ resource "openstack_networking_secgroup_v2" "mlops_secgrp" {
   name        = var.security_group_name
   description = "Security group for MLOps VMs"
 }
+resource "openstack_networking_secgroup_v2" "mlops_secgrp_proj4" {
+  provider    = openstack.kvm
+  name        = "mlops-secgrp-proj4" # must be globally unique in your project
+  description = "Security group for MLOps VMs (proj4)"
+}
 
 # Ingress rules
 resource "openstack_networking_secgroup_rule_v2" "ssh_ingress" {
   provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp.id
+  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
   direction         = "ingress"
   protocol          = "tcp"
   port_range_min    = 22
@@ -79,7 +84,7 @@ resource "openstack_networking_secgroup_rule_v2" "ssh_ingress" {
 
 resource "openstack_networking_secgroup_rule_v2" "icmp_ingress" {
   provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp.id
+  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
   direction         = "ingress"
   protocol          = "icmp"
   remote_ip_prefix  = "0.0.0.0/0"
@@ -89,12 +94,12 @@ resource "openstack_networking_secgroup_rule_v2" "icmp_ingress" {
 # Intra-group traffic
 resource "openstack_networking_secgroup_rule_v2" "internal" {
   provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp.id
+  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
   direction         = "ingress"
   protocol          = "tcp"
   port_range_min    = 1
   port_range_max    = 65535
-  remote_group_id   = openstack_networking_secgroup_v2.mlops_secgrp.id
+  remote_group_id   = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
   ethertype         = "IPv4"
 }
 
@@ -102,7 +107,7 @@ resource "openstack_networking_secgroup_rule_v2" "internal" {
 resource "openstack_networking_secgroup_rule_v2" "app_ports" {
   for_each          = toset(local.app_ports_str)
   provider          = openstack.kvm
-  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp.id
+  security_group_id = openstack_networking_secgroup_v2.mlops_secgrp_proj4.id
   direction         = "ingress"
   protocol          = "tcp"
   port_range_min    = tonumber(each.value)

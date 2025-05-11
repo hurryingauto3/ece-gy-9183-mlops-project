@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
 WORKDIR /build
 
 # Copy only files needed for dependency installation
-COPY model_serving/pyproject.toml model_serving/poetry.lock* /build/
+COPY pyproject.toml poetry.lock* /build/
 
 # Install dependencies and export requirements
 # --without dev: Exclude development dependencies like pytest from the export
@@ -36,12 +36,11 @@ COPY --from=builder /build/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy application code from build context
-# Ensure this path matches the location of your app code relative to Dockerfile
-COPY model_serving /app/model_serving
+COPY . /app/model_serving
 
 # Set environment variables
-ENV MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}
-ENV FEATURE_SERVICE_URL=${FEATURE_SERVICE_URL}
+ENV MLFLOW_TRACKING_URI=""
+ENV FEATURE_SERVICE_URL=""
 # Ensure this is passed during docker run
 ENV PYTHONPATH=/app
 # Add environment variable for number of workers (default to 2 if not set)
@@ -58,4 +57,6 @@ EXPOSE 8000
 # Adjust the CMD to point to the app within the model_serving directory
 # Use the $UVICORN_WORKERS environment variable
 CMD ["uvicorn", "model_serving.app:app", "--host", "0.0.0.0", "--port", "8000"]
+
+
 #  "--workers", "${UVICORN_WORKERS}"]
