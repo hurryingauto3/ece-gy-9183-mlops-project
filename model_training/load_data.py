@@ -1,4 +1,3 @@
-# data_loader.py
 import torch
 from torch.utils.data import Dataset
 import pandas as pd
@@ -7,7 +6,7 @@ from typing import Dict, List, Tuple
 
 logger = structlog.get_logger(__name__)
 
-# Must match exactly the columns in your CSVs after fetch_data.py adds them:
+# These columns must exactly match the ones in your output CSVs
 WEATHER_FEATURE_COLUMNS = [
     'Avg Temperature (K)', 'Max Temperature (K)', 'Min Temperature (K)',
     'Precipitation (kg m**-2)', 'Relative Humidity (%)',
@@ -19,8 +18,8 @@ WEATHER_FEATURE_COLUMNS = [
 
 class LocalCropYieldDataset(Dataset):
     """
-    One CSV with columns [Year, FIPS Code, ...weather..., Yield].
-    Groups by (Year, FIPS) to produce one sample per county-year.
+    Loads a single CSV (train/eval/test) with rows for a single year + FIPS.
+    Converts weather time series into a torch tensor and yield into a scalar.
     """
 
     def __init__(self, csv_path: str, transform=None):
@@ -37,12 +36,11 @@ class LocalCropYieldDataset(Dataset):
 
     def _load(self, path: str):
         df = pd.read_csv(path)
-        needed = set(WEATHER_FEATURE_COLUMNS + ["Year","Yield","FIPS Code"])
-        if not needed.issubset(df.columns):
-            missing = needed - set(df.columns)
-            raise ValueError(f"CSV missing: {missing}")
+        required = set(WEATHER_FEATURE_COLUMNS + ["Year", "Yield", "FIPS Code"])
+        if not required.issubset(df.columns):
+            raise ValueError(f"CSV missing columns: {required - set(df.columns)}")
 
-        for (year, fips), group in df.groupby(["Year","FIPS Code"]):
+        for (year, fips), group in df.groupby(["Year", "FIPS Code"]):
             ystr = str(year)
             fstr = str(fips)
             if fstr not in self._fips_to_id:
@@ -52,7 +50,7 @@ class LocalCropYieldDataset(Dataset):
             fid = self._fips_to_id[fstr]
 
             arr = group[WEATHER_FEATURE_COLUMNS].dropna().values
-            if arr.shape[0]==0:
+            if arr.shape[0] == 0:
                 continue
             wt = torch.tensor(arr, dtype=torch.float32)
             yt = torch.tensor(float(group["Yield"].iloc[0]), dtype=torch.float32)
@@ -70,7 +68,7 @@ class LocalCropYieldDataset(Dataset):
             wt = self.transform(wt)
         return wt, yt, fid
 
-    def get_fips_mapping(self) -> Tuple[Dict[str,int], Dict[int,str]]:
+    def get_fips_mapping(self) -> Tuple[Dict[str, int], Dict[int, str]]:
         return self._fips_to_id, self._id_to_fips
 
     def get_num_fips(self) -> int:
@@ -79,5 +77,5 @@ class LocalCropYieldDataset(Dataset):
     def get_years(self) -> List[str]:
         return sorted(self._by_year.keys())
 
-    def get_sample_indices_by_year(self) -> Dict[str,List[int]]:
+    def get_sample_indices_by_year(self) -> Dict[str, List[int]]:
         return self._by_year
