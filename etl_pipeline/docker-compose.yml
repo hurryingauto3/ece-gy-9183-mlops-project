@@ -2,7 +2,7 @@ services:
 
 # --- ETL Job Service ---
   etl-download:
-    build: ./etl_pipeline/extract
+    build: ./extract
     container_name: etl-extract-container
     volumes:
       # - ./local_data:/app/data_lake
@@ -37,7 +37,7 @@ services:
 
   etl-transform:
     profiles: ["gpu"]
-    build: ./etl_pipeline/transform
+    build: ./transform
     container_name: etl-transform-container
     volumes:
       # - ./local_data:/app/data_lake  # Fetch data from local VM storage
