@@ -160,7 +160,7 @@ def save_crop_yield(fips_code, crop, new_records):
 
 # --- HRRR Processor ---
 def process_weather_data():
-    hrrr_base = Path(raw_data_root) / "HRRR" / "data"
+    hrrr_base = Path(raw_data_root) / "WRF-HRRR Computed dataset" / "data"
     if not hrrr_base.exists():
         logger.warning("No HRRR data found.")
         return
@@ -187,7 +187,7 @@ def process_weather_data():
 
 # --- USDA Processor ---
 def process_usda_data():
-    usda_base = Path(raw_data_root) / "USDA" / "data"
+    usda_base = Path(raw_data_root) / "USDA Crop Dataset" / "data"
     if not usda_base.exists():
         logger.warning("No USDA data found.")
         return
