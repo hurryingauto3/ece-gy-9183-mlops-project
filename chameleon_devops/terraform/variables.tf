@@ -58,12 +58,7 @@ variable "ext_net_name_kvm" {
   type        = string
   default     = "public"
 }
-variable "ext_net_name_uc" {
-  description = "Public network in KVM@TACC"
-  type        = string
-  default     = "public"
-}
-variable "ext_net_name_tacc" {
+variable "ext_net_name_chi" {
   description = "Public network in CHI@TACC"
   type        = string
   default     = "public" # <— adjust if your CHI site uses a different name
@@ -117,12 +112,6 @@ variable "network_cidr" {
   type        = string
   default     = "10.0.0.0/24"
 }
-
-variable "private_net_chi_id" {
-  description = "The single CHI@TACC private-network ID to attach GPU instances to"
-  type        = string
-}
-
 
 # Security group
 variable "security_group_name" {
@@ -188,28 +177,8 @@ variable "gpu_reservation_id_uc" {
   type        = string
 }
 
-variable "gpu_image_id_tacc" {
-  description = "GPU image UUID for CHI@UC"
-  type        = string
-}
-
-variable "gpu_reservation_id_tacc" {
-  description = "Reservation UUID for GPU node in CHI@UC"
-  type        = string
-}
-
 variable "enable_gpu_block_storage" {
   description = "Whether to attach persistent block storage to the GPU node"
   type        = bool
   default     = false
-}
-
-variable "gpu_site" {
-  description = "Which CHI site to use for the GPU host: chi_tacc or chi_uc"
-  type        = string
-  default     = "chi_tacc"
-  validation {
-    condition     = contains(["chi_tacc", "chi_uc"], var.gpu_site)
-    error_message = "gpu_site must be either \"chi_tacc\" or \"chi_uc\""
-  }
 }

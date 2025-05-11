@@ -1,41 +1,43 @@
+# This playbook installs Docker and the NVIDIA container runtime on Ubuntu 24.04.
 
 output "services_node_ip" {
   value = openstack_networking_floatingip_v2.fip_services.address
 }
-
 output "ssh_command_services_node" {
-  value = "ssh -i ~/.ssh/${openstack_compute_keypair_v2.keypair_kvm.name} cc@${openstack_networking_floatingip_v2.fip_services.address}"
+  description = "SSH command to connect to the Services VM using the floating IP"
+  value       = "ssh -i ~/.ssh/${openstack_compute_keypair_v2.keypair.name} cc@${openstack_networking_floatingip_v2.fip_services.address}"
 }
-
 output "gpu_node_ip" {
-  value = local.use_chi_tacc ? openstack_networking_floatingip_v2.fip_gpu_chi_tacc[0].address : openstack_networking_floatingip_v2.fip_gpu_chi_uc[0].address
+  value = openstack_networking_floatingip_v2.fip_gpu_uc.address
 }
-
 output "ssh_command_gpu_node" {
-  value = local.use_chi_tacc ? "ssh -i ${local.private_key_path} cc@${openstack_networking_floatingip_v2.fip_gpu_chi_tacc[0].address}" : "ssh -i ${local.private_key_path} cc@${openstack_networking_floatingip_v2.fip_gpu_chi_uc[0].address}"
+  description = "SSH command to connect to the GPU VM using the floating IP"
+  value       = "ssh -i ~/.ssh/${openstack_compute_keypair_v2.keypair_uc.name} cc@${openstack_networking_floatingip_v2.fip_gpu_uc.address}"
 }
-
 output "services_private_ip" {
   value = openstack_compute_instance_v2.services_node.network[0].fixed_ip_v4
 }
-
 output "gpu_private_ip" {
-  value = local.use_chi_tacc ? openstack_compute_instance_v2.gpu_node_chi_tacc[0].network[0].fixed_ip_v4 : openstack_compute_instance_v2.gpu_node_chi_uc[0].network[0].fixed_ip_v4
+  value = openstack_compute_instance_v2.gpu_node.network[0].fixed_ip_v4
 }
 
+# Optionally, output an Ansible inventory snippet
 output "ansible_inventory" {
-  value = <<-EOT
+  description = "Suggested inventory snippet for Ansible"
+  # use a “left‑trim” heredoc so any indentation is removed
+  value = <<-EOF
     [services_nodes]
     services-node ansible_host=${openstack_networking_floatingip_v2.fip_services.address} ansible_user=cc
 
     [gpu_nodes]
-    gpu-node ansible_host=${local.use_chi_tacc ? openstack_networking_floatingip_v2.fip_gpu_chi_tacc[0].address : openstack_networking_floatingip_v2.fip_gpu_chi_uc[0].address} ansible_user=cc
+    gpu-node ansible_host=${openstack_networking_floatingip_v2.fip_gpu_uc.address} ansible_user=cc
 
     [k8s_control_plane]
     services-node ansible_host=${openstack_networking_floatingip_v2.fip_services.address} ansible_user=cc
 
     [all:vars]
-    ansible_ssh_private_key_file=${local.private_key_path}
+    ansible_ssh_private_key_file=~/.ssh/${openstack_compute_keypair_v2.keypair.name}
     ansible_python_interpreter=/usr/bin/python3
-  EOT
+  EOF
 }
+

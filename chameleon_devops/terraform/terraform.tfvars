@@ -1,7 +1,4 @@
 # cloud = "chameleon"
-
-# gpu_site = "chi_tacc" # or "chi_uc"
-gpu_site = "chi_uc" # or "chi_tacc"
 cloud = "kvm"
 
 cloud_kvm       = "kvm"
@@ -33,14 +30,8 @@ enable_staging      = false
 # gpu_reservation_id = "47d0e0cd-883c-4639-a646-a47fde6e7c4a"
 # gpu_reservation_id = "8c7169a8-0f36-4d4a-a1f3-eaddf7646112"
 # gpu_reservation_id = "15b16b92-95c9-4d4e-87b9-5e2eac70ee29"
-# gpu_reservation_id = "d97ab437-5cab-47a6-99dc-001ba9822c18"
+gpu_reservation_id = "d97ab437-5cab-47a6-99dc-001ba9822c18"
 
-gpu_image_id_uc   = "45661d6e-d442-48b2-892f-e39a246011cc"
-gpu_image_id_tacc = "fab0dfeb-52d7-46fd-9398-613daf8e63c0"
-
+gpu_image_id_uc = "45661d6e-d442-48b2-892f-e39a246011cc"
 # gpu_reservation_id_uc = "d97ab437-5cab-47a6-99dc-001ba9822c18"
-# gpu_reservation_id_uc = "1def9c07-1eda-44fc-9564-dae33761ba88"
-# gpu_reservation_id_uc = "dfac712e-3045-4a19-ad2c-7ff0a0ba8d45"
-gpu_reservation_id_uc = "323712db-e65b-47dd-bf48-3df29532959a"
-gpu_reservation_id_tacc = "1e1edcc2-7276-4201-a5d4-408ddb6f850a"
-private_net_chi_id      = "c95788a7-75fd-422d-91af-8bd31704f03f"
+gpu_reservation_id_uc = "1def9c07-1eda-44fc-9564-dae33761ba88"
