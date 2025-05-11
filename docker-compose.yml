@@ -3,7 +3,7 @@ services:
     profiles: ["services"]
     image: ghcr.io/mlflow/mlflow:v2.0.1
     container_name: mlflow-container
-    platform: linux/arm64/v8 # KEEP this if your host is AMD64 (uname -m is x86_64)
+    platform: linux/amd64 # CHANGE to linux/arm64/v8 if your host is ARM64 (uname -m is aarch64)
                           # CHANGE to linux/arm64/v8 if your host is ARM64 (uname -m is aarch64)
     ports:
       # IMPORTANT: Your .env has MLFLOW_TRACKING_URI=http://mlflow:5000
