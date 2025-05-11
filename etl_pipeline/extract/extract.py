@@ -149,6 +149,7 @@ def main():
 
     # Define the base local directory where files will be temporarily downloaded
     base_download_dir = args.output
+    print("DEBUG ARGS:", args.folder_ids)
 
     logger.info("--- ETL Pipeline Start (File-by-File) ---")
     logger.info(f"Google Drive folder IDs: {args.folder_ids}")
