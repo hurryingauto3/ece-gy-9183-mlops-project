@@ -265,8 +265,9 @@ def build_final_dataset():
     training_df = full_df[full_df["Year"].astype(str).isin(training_years)]
     year_2022_df = full_df[full_df["Year"].astype(str) == val_test_year]
 
-    val_df = year_2022_df.sample(frac=0.5, random_state=42)
-    test_df = year_2022_df.drop(val_df.index)
+    val_df = year_2022_df[year_2022_df["Day"] % 2 == 1]  # Odd days
+    test_df = year_2022_df[year_2022_df["Day"] % 2 == 0]  # Even days
+
 
     # Save final datasets
     training_path = Path(transformed_data_root) / "training.csv"
