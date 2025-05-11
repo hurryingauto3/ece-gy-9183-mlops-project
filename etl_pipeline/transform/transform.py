@@ -55,10 +55,17 @@ def preprocess_hrrr_all_months(file_paths):
         'Downward Shortwave Radiation Flux (W m**-2)': 'Solar Flux (W/m²)',
         'Vapor Pressure Deficit (kPa)': 'VPD (kPa)'
     }, inplace=True)
-    df_all.dropna(inplace=True)
-    int_columns = ['Day', 'Month', 'Year']
-    df[int_columns] = df[int_columns].astype(int)
+    df_all.dropna(subset=["FIPS", "Year", "Month", "Day"], inplace=True)
+    df_all[["Year", "Month", "Day"]] = df_all[["Year", "Month", "Day"]].astype(int)
     df_all["FIPS"] = df_all["FIPS"].astype(int).apply(lambda x: f"{x:05d}")
+    weather_cols = [
+        'Avg Temp (K)', 'Max Temp (K)', 'Min Temp (K)', 'Precip (kg/m²)',
+        'Humidity (%)', 'Wind Gust (m/s)', 'Wind Speed (m/s)',
+        'U Wind (m/s)', 'V Wind (m/s)', 'Solar Flux (W/m²)', 'VPD (kPa)'
+    ]
+    df_ffill = df_all[weather_cols].ffill()
+    df_bfill = df_all[weather_cols].bfill()
+    df_all[weather_cols] = ((df_ffill + df_bfill) / 2)
 
     agg_df = df_all.groupby(["FIPS", "Year", "Month", "Day"]).agg({
         'Avg Temp (K)': 'mean',
