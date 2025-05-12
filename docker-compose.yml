@@ -127,8 +127,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      # - ./devops/docker-compose/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./devops/docker-compose/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -151,8 +150,8 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
     volumes:
-      - ./devops/docker-compose/grafana/provisioning:/etc/grafana/provisioning
-      - ./devops/docker-compose/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
       - grafana_data:/var/lib/grafana
     restart: unless-stopped
     depends_on:

@@ -14,7 +14,9 @@ pandas = "^2.1.2" # Or the version you installed
 pydantic-settings = "^2.0.3" # Or the version you installed
 structlog = "^23.2.0" # Or the version you installed
 openstacksdk = "^1.2.0" # Or the version you installed
-keystoneauth1 = "^5.10.0" 
+keystoneauth1 = "^5.10.0"
+prometheus-client = "^0.19.0"
+prometheus-fastapi-instrumentator = "^6.1.0"
 
 
 [build-system]

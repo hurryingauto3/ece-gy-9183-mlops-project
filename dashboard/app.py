@@ -8,6 +8,49 @@ from datetime import datetime, date # date is used for date_input
 from api_service import fetch_single_crop_histogram_prediction #, fetch_historical_data # Keep historical if needed later
 from data_processor import process_histogram_prediction #, process_historical_data, combine_historical_and_prediction
 
+# Prometheus client
+from prometheus_client import Counter, Gauge, start_http_server
+import threading # To run Prometheus server in a separate thread
+import atexit # To handle cleanup if needed, though less critical for read-only metrics server
+
+# --- Prometheus Metrics Setup ---
+# Ensure this block runs only once
+PROMETHEUS_PORT = 9095 # Internal port for Prometheus scraping within Docker network
+_prometheus_server_started = False
+_prometheus_thread = None
+
+# Define metrics
+PAGE_VIEWS = Counter('dashboard_page_views', 'Dashboard page view count')
+PREDICTION_REQUESTS = Counter('dashboard_prediction_requests_total', 'Total prediction requests made from dashboard')
+ACTIVE_SESSIONS = Gauge('dashboard_active_sessions', 'Number of active dashboard user sessions') # Simplified
+LAST_PREDICTION_TIME = Gauge('dashboard_last_prediction_timestamp_seconds', 'Timestamp of the last prediction request')
+
+def start_metrics_server():
+    global _prometheus_server_started, _prometheus_thread
+    if not _prometheus_server_started:
+        try:
+            start_http_server(PROMETHEUS_PORT)
+            _prometheus_server_started = True
+            st.session_state['_prometheus_server_started'] = True # Use session state to persist across reruns
+            print(f"INFO: Prometheus metrics server started on port {PROMETHEUS_PORT}")
+        except Exception as e:
+            print(f"ERROR: Failed to start Prometheus metrics server on port {PROMETHEUS_PORT}: {e}")
+
+# Attempt to start the server if not already started in this session
+if '_prometheus_server_started' not in st.session_state:
+    # For multipage apps or more complex scenarios, managing the thread might be needed.
+    # For a single page app, starting it once should be okay.
+    # A more robust way for multipage apps is to manage a single thread across sessions.
+    _prometheus_thread = threading.Thread(target=start_metrics_server, daemon=True)
+    _prometheus_thread.start()
+
+# Increment page view counter (this will run on every script run / interaction)
+PAGE_VIEWS.inc()
+# For active sessions, Streamlit doesn't have a direct hook for session end without more complex management.
+# This gauge would ideally be managed by a more sophisticated session tracking mechanism if needed.
+# For simplicity, we might increment on new session and decrement if we could detect session close.
+# A simpler proxy: set to number of current unique session IDs (if accessible and meaningful).
+
 # Page configuration
 st.set_page_config(
     page_title="Crop Yield Histogram Prediction Dashboard",
@@ -63,6 +106,8 @@ if st.sidebar.button("Get Prediction"):
     elif not selected_crop:
         st.error("Please select a Crop Type.")
     else:
+        PREDICTION_REQUESTS.inc() # Increment counter for prediction requests
+        LAST_PREDICTION_TIME.set_to_current_time()
         with st.spinner(f"Fetching prediction for {selected_crop} in {county_fips_input} for date {cut_off_date_input}..."):
             try:
                 # API call to get histogram prediction

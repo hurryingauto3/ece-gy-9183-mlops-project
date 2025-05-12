@@ -1,0 +1,278 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "title": "Model Serving: Request Rate",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "rate(fastapi_requests_total{job=\"model-serving\"}[5m])",
+          "legendFormat": "requests/sec",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          }
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "description": "Rate of requests to the model serving API."
+    },
+    {
+      "title": "Model Serving: P95 Latency",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(fastapi_request_duration_seconds_bucket{job=\"model-serving\"}[5m])) by (le))",
+          "legendFormat": "P95 Latency",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          }
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "unit": "s",
+      "description": "95th percentile request latency for model serving."
+    },
+    {
+      "title": "Model Serving: Error Rate (5xx)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(fastapi_requests_total{job=\"model-serving\",status_code=~\"5..\"}[5m])) / sum(rate(fastapi_requests_total{job=\"model-serving\"}[5m])) * 100",
+          "legendFormat": "Error %",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          }
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "unit": "percent",
+      "description": "Percentage of 5xx errors for model serving."
+    },
+    {
+      "title": "Feature Serving: Request Rate",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "rate(fastapi_requests_total{job=\"feature-serving\"}[5m])",
+          "legendFormat": "requests/sec",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          }
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "description": "Rate of requests to the feature serving API."
+    },
+    {
+      "title": "Feature Serving: P95 Latency",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(fastapi_request_duration_seconds_bucket{job=\"feature-serving\"}[5m])) by (le))",
+          "legendFormat": "P95 Latency",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          }
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "unit": "s",
+      "description": "95th percentile request latency for feature serving."
+    },
+    {
+      "title": "Feature Serving: Error Rate (5xx)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(fastapi_requests_total{job=\"feature-serving\",status_code=~\"5..\"}[5m])) / sum(rate(fastapi_requests_total{job=\"feature-serving\"}[5m])) * 100",
+          "legendFormat": "Error %",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          }
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "unit": "percent",
+      "description": "Percentage of 5xx errors for feature serving."
+    },
+    {
+      "title": "Dashboard: Page Views",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "dashboard_page_views_total",
+          "legendFormat": "Total Page Views",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          }
+        }
+      ],
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 16 },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "title": "Dashboard: Prediction Requests",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "dashboard_prediction_requests_total",
+          "legendFormat": "Total Predictions",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          }
+        }
+      ],
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 16 },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "title": "Dashboard: Last Prediction Time",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "dashboard_last_prediction_timestamp_seconds",
+          "legendFormat": "Last Prediction",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          }
+        }
+      ],
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 16 },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s Epoch",
+          "custom": {
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    }
+  ],
+  "schemaVersion": 36,
+  "style": "dark",
+  "tags": [],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Comprehensive Service Overview",
+  "uid": "comprehensive-services-overview",
+  "version": 3
+} 
