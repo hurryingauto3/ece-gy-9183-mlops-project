@@ -1,74 +1,98 @@
-# train.py
 import os
 import argparse
-import pandas as pd
 import torch
+import mlflow
 import mlflow.pytorch
-
-from data_loader import LocalCropYieldDataset
-from model       import LSTMTCNRegressor
-from utils       import collate_fn, train_model, evaluate_model
+from load_data import MultiCropYieldDataset
+from model import LSTMTCNRegressor
+from utils import collate_fn, train_model, evaluate_model
+import subprocess
 
 def parse_args():
-    p = argparse.ArgumentParser()
-    p.add_argument("--train-csv", required=True)
-    p.add_argument("--test-csv",  required=True)
+    p = argparse.ArgumentParser(description="Train & register multi-crop yield model with MLflow")
+    p.add_argument("--train-csv", required=True, help="Path to training CSV")
+    p.add_argument("--eval-csv", required=True, help="Path to eval CSV")
     p.add_argument("--batch-size", type=int, default=32)
-    p.add_argument("--epochs",     type=int, default=20)
-    p.add_argument("--lr",         type=float, default=1e-3)
-    p.add_argument("--mlflow",     action="store_true")
+    p.add_argument("--epochs", type=int, default=20)
+    p.add_argument("--lr", type=float, default=1e-3)
+    p.add_argument("--mlflow", action="store_true", help="Enable MLflow logging")
     return p.parse_args()
 
 def main():
     args = parse_args()
 
-    # 1) load datasets
-    train_ds = LocalCropYieldDataset(args.train_csv)
-    test_ds  = LocalCropYieldDataset(args.test_csv)
+    # 1) Load datasets
+    train_ds = MultiCropYieldDataset(os.path.abspath(args.train_csv))
+    eval_ds  = MultiCropYieldDataset(os.path.abspath(args.eval_csv))
 
     train_loader = torch.utils.data.DataLoader(
         train_ds, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn
     )
-    test_loader  = torch.utils.data.DataLoader(
-        test_ds,  batch_size=args.batch_size, shuffle=False, collate_fn=collate_fn
+    eval_loader = torch.utils.data.DataLoader(
+        eval_ds, batch_size=args.batch_size, shuffle=False, collate_fn=collate_fn
     )
 
-    # 2) build model
-    input_dim = len(LocalCropYieldDataset.__dict__['WEATHER_FEATURE_COLUMNS'])
-    num_fips  = train_ds.get_num_fips()
+    # 2) Build model
+    input_dim = train_ds[0][0].shape[1]
+    num_fips = train_ds.get_num_fips()
+    num_crops = train_ds.get_num_crops()
 
     model = LSTMTCNRegressor(
         input_dim=input_dim,
         num_fips=num_fips,
+        num_crops=num_crops,
         fips_embedding_dim=16,
         hidden_dim=64,
         lstm_layers=1,
-        tcn_channels=[64,32],
+        tcn_channels=[64, 32],
         dropout_rate=0.1
     )
 
-    # 3) (optional) MLflow start
+    # 3) MLflow logging
     if args.mlflow:
-        mlflow.set_experiment("CropYield")
-        mlflow.start_run()
+        tracking_uri = os.environ["MLFLOW_TRACKING_URI"]
+        experiment_name = os.environ["MLFLOW_EXPERIMENT_NAME"]
+        model_name = os.environ["MLFLOW_MODEL_NAME"]
 
-    # 4) train + eval
-    model = train_model(model, train_loader,
-                        num_epochs=args.epochs,
-                        lr=args.lr)
-    rmse, mae = evaluate_model(model, test_loader)
+        mlflow.set_tracking_uri(tracking_uri)
+        mlflow.set_experiment(experiment_name)
+
+        mlflow.start_run(log_system_metrics=True)
+
+        mlflow.log_params({
+            "batch_size": args.batch_size,
+            "epochs": args.epochs,
+            "lr": args.lr,
+            "hidden_dim": 64,
+            "tcn_channels": [64, 32],
+            "lstm_layers": 1,
+            "dropout": 0.1,
+        })
+
+        # Log GPU info
+        try:
+            gpu_info = subprocess.check_output(["nvidia-smi"]).decode("utf-8")
+            mlflow.log_text(gpu_info, "gpu-info.txt")
+        except Exception as e:
+            print("Could not log GPU info:", e)
+
+    # 4) Train model
+    model = train_model(model, train_loader, eval_loader, num_epochs=args.epochs, lr=args.lr)
+
+    # 5) Evaluate
+    rmse, mae = evaluate_model(model, eval_loader)
 
     if args.mlflow:
-        mlflow.log_param("batch_size", args.batch_size)
-        mlflow.log_param("lr", args.lr)
-        mlflow.log_metric("test_rmse", rmse)
-        mlflow.log_metric("test_mae",  mae)
-        mlflow.pytorch.log_model(
-            model,
-            artifact_path="crop_yield_model",
-            registered_model_name="AgriYieldPredictor"
-        )
+        mlflow.log_metrics({"eval_rmse": rmse, "eval_mae": mae})
+        mlflow.pytorch.log_model(model, "model")
+
+        # Register the model under versioned name
+        run_id = mlflow.active_run().info.run_id
+        model_uri = f"runs:/{run_id}/model"
+        result = mlflow.register_model(model_uri=model_uri, name=model_name)
+        print(f"[MLflow] Registered model as version: {result.version}")
+
         mlflow.end_run()
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()

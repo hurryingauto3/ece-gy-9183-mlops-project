@@ -1,0 +1,88 @@
+
+services:
+  # --- Feature Service (used for dummy data generation) ---
+  feature-service:
+    # profiles: ["services", "gpu"] # Keep profiles if you use them
+    build:
+      context: ./feature_serving
+      dockerfile: Dockerfile
+    container_name: dummy-feature-service-container
+    ports:
+      - target: 8001
+        published: 8001 # Or a different port if 8001 is taken by your main compose
+        protocol: tcp
+        mode: ingress
+    restart: unless-stopped
+    environment:
+      # --- Feature Service OpenStack Vars (will be ignored by dummy mode if connection fails) ---
+      - OS_AUTH_URL=${OS_AUTH_URL}
+      - OS_AUTH_TYPE=${OS_AUTH_TYPE}
+      - OS_APPLICATION_CREDENTIAL_ID=${OS_APPLICATION_CREDENTIAL_ID}
+      - OS_APPLICATION_CREDENTIAL_SECRET=${OS_APPLICATION_CREDENTIAL_SECRET}
+      - OS_REGION_NAME=${OS_REGION_NAME}
+      - FS_OPENSTACK_SWIFT_CONTAINER_NAME=${FS_OPENSTACK_SWIFT_CONTAINER_NAME}
+      # Optional log level
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+  # --- Model Serving Service (configured for DUMMY mode) ---
+  model-serving:
+    # profiles: ["services"] # Keep profiles if you use them
+    build:
+      context: .
+      dockerfile: model_serving/Dockerfile
+    container_name: dummy-model-serving-container
+    ports:
+      - "8000:8000" # Or a different port if 8000 is taken by your main compose
+    environment:
+      # --- Core Service URLs ---
+      - FEATURE_SERVICE_URL=http://feature-service:8001 # Points to the feature-service above
+      - MLFLOW_TRACKING_URI=http://dummy-mlflow-host:5001 
+      
+      # --- MLflow Dummy Mode Configuration ---
+      - MLFLOW_DUMMY_MODE=true
+      # Paths for assets generated INSIDE the container by entrypoint.sh calling generate_dummy_assets.py
+      - MLFLOW_DUMMY_MODEL_PATH=/app/dummy_assets/dummy_model_state.pth
+      - MLFLOW_DUMMY_FIPS_MAPPING_PATH=/app/dummy_assets/fips_to_id_mapping.json
+      - MLFLOW_DUMMY_CROP_MAPPING_PATH=/app/dummy_assets/crop_to_id_mapping.json
+      - MLFLOW_DUMMY_MODEL_NUM_BINS=${MLFLOW_DUMMY_MODEL_NUM_BINS:-5} # Can be overridden by .env
+      # Environment variable for the generation script itself
+      - DUMMY_ASSETS_DIR=/app/dummy_assets
+      
+      # --- Other MLflow settings (less relevant in dummy mode but good to keep for structure) ---
+      - MLFLOW_MODEL_NAME=DummyYieldPredictor 
+      - MLFLOW_MODEL_STAGE=Dummy
+
+      # --- API Settings & Logging ---
+      - API_PREDICT_LIMIT=${API_PREDICT_LIMIT:-100/minute} 
+      - API_PREDICT_BATCH_LIMIT=${API_PREDICT_BATCH_LIMIT:-50/minute}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    # VOLUMES:
+    # - ./model_serving/dummy_assets:/app/dummy_assets:ro # REMOVED - assets are generated in container
+    restart: unless-stopped
+    depends_on:
+      - feature-service
+
+  dashboard:
+      build:
+        context: ./dashboard
+        dockerfile: Dockerfile
+      container_name: dashboard-container
+      ports:
+        - "8501:8501"
+      environment:
+        - MODEL_SERVING_API_URL=http://model-serving:8000
+        # You can add other necessary environment variables for the dashboard here
+        # For example, if you want to control Streamlit's log level:
+        # - STREAMLIT_LOG_LEVEL=debug 
+      restart: unless-stopped
+      depends_on:
+        - model-serving #
+
+# To keep this dummy compose focused on testing the model and feature services:
+# - The 'mlflow' service from the original compose is omitted.
+# - 'prometheus' and 'grafana' are omitted as their primary utility (monitoring MLflow and model-serving metrics via MLflow) is reduced.
+# You can add them back if needed for broader testing.
+
+# Define named volumes if any service still needs them (less likely without mlflow)
+# volumes:
+#   persistent_data: # Example if any other service needed it 

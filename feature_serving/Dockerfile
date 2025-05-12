@@ -1,7 +1,7 @@
 # feature_serving/Dockerfile
 # Use a Python image compatible with your pyproject.toml.
 # Using slim is good for size, but might need build tools.
-FROM python:3.10-slim
+FROM python:3.11.9
 
 # Set environment variables for non-interactive apt install and unbuffered python output
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -11,7 +11,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # libffi-dev, libssl-dev are common for network/auth libs
 # curl, git needed by the Poetry installer script
 # Example RUN apt-get install line (adjust as needed based on other deps)
-RUN apt-get update \
+RUN apt-get update || true \
     && apt-get install -y --no-install-recommends \
         curl \
         git \
@@ -19,6 +19,9 @@ RUN apt-get update \
         libssl-dev \
         build-essential \
         gfortran \
+        gnupg \
+        ca-certificates \
+    && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 0xA1BCB2D2 || true \
     && rm -rf /var/lib/apt/lists/* # Clean up apt cache
 
 # Install Poetry globally, specifying a version that supports package-mode (>=1.5.0)
@@ -45,7 +48,7 @@ COPY pyproject.toml poetry.lock* ./
 # --sync: Syncs the environment with poetry.lock
 RUN poetry install --no-interaction --no-ansi --no-root
 
-# Copy the application code
+# Copy the application codec
 # Copy the refactored scripts and modules into the container's working directory (/app)
 COPY config.py ./feature_serving/
 COPY data_loader.py ./feature_serving/

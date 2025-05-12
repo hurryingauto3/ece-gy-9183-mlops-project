@@ -4,8 +4,6 @@ import pandas as pd
 from pathlib import Path
 import logging
 from collections import defaultdict
-import shutil
-
 
 # --- Logging setup ---
 logger = logging.getLogger("data_processing_pipeline")
@@ -15,18 +13,22 @@ logger.addHandler(logging.StreamHandler())
 # --- Directory paths ---
 raw_data_root = "/mnt/swift_store/raw_data"
 transformed_data_root = "/mnt/swift_store/transformed_data"
+Path(transformed_data_root).mkdir(parents=True, exist_ok=True)
 
 # --- Supported crops ---
 crops = ["Corn", "Soybeans", "Cotton", "WinterWheat"]
 commodity_map = {"WinterWheat": "Wheat"}  # USDA uses 'Wheat' for WinterWheat
 
-Path(transformed_data_root).mkdir(parents=True, exist_ok=True)
-
+# --- In-memory storage ---
+combined_records = []
 
 # --- Preprocess HRRR Weather Files ---
 def preprocess_hrrr_all_months(file_paths):
     dfs = []
     for path in file_paths:
+        if path.is_dir():
+            logger.warning(f"Skipping directory in file list: {path}")
+            continue
         try:
             df = pd.read_csv(path)
             dfs.append(df)
@@ -38,14 +40,7 @@ def preprocess_hrrr_all_months(file_paths):
 
     df_all = pd.concat(dfs, ignore_index=True)
 
-    df_clean = df_all[[
-        'Year', 'Month', 'Day', 'FIPS Code',
-        'Avg Temperature (K)', 'Max Temperature (K)', 'Min Temperature (K)',
-        'Precipitation (kg m**-2)', 'Relative Humidity (%)',
-        'Wind Gust (m s**-1)', 'Wind Speed (m s**-1)'
-    ]].dropna()
-
-    df_clean.rename(columns={
+    df_all.rename(columns={
         'FIPS Code': 'FIPS',
         'Avg Temperature (K)': 'Avg Temp (K)',
         'Max Temperature (K)': 'Max Temp (K)',
@@ -53,17 +48,46 @@ def preprocess_hrrr_all_months(file_paths):
         'Precipitation (kg m**-2)': 'Precip (kg/m²)',
         'Relative Humidity (%)': 'Humidity (%)',
         'Wind Gust (m s**-1)': 'Wind Gust (m/s)',
-        'Wind Speed (m s**-1)': 'Wind Speed (m/s)'
+        'Wind Speed (m s**-1)': 'Wind Speed (m/s)',
+        'U Component of Wind (m s**-1)': 'U Wind (m/s)',
+        'V Component of Wind (m s**-1)': 'V Wind (m/s)',
+        'Downward Shortwave Radiation Flux (W m**-2)': 'Solar Flux (W/m²)',
+        'Vapor Pressure Deficit (kPa)': 'VPD (kPa)'
     }, inplace=True)
-    df_clean["FIPS"] = df_clean["FIPS"].astype(int).apply(lambda x: f"{x:05d}")
 
-    return df_clean
+    weather_cols = [
+        'Avg Temp (K)', 'Max Temp (K)', 'Min Temp (K)', 'Precip (kg/m²)',
+        'Humidity (%)', 'Wind Gust (m/s)', 'Wind Speed (m/s)',
+        'U Wind (m/s)', 'V Wind (m/s)', 'Solar Flux (W/m²)', 'VPD (kPa)'
+    ]
+    df_ffill = df_all[weather_cols].ffill()
+    df_bfill = df_all[weather_cols].bfill()
+    df_all[weather_cols] = ((df_ffill + df_bfill) / 2)
+
+    agg_df = df_all.groupby(["FIPS", "Year", "Month", "Day"]).agg({
+        'Avg Temp (K)': 'mean',
+        'Max Temp (K)': 'max',
+        'Min Temp (K)': 'min',
+        'Precip (kg/m²)': ['mean', 'min', 'max'],
+        'Humidity (%)': ['mean', 'min', 'max'],
+        'Wind Gust (m/s)': ['mean', 'min', 'max'],
+        'Wind Speed (m/s)': ['mean', 'min', 'max'],
+        'U Wind (m/s)': ['mean', 'min', 'max'],
+        'V Wind (m/s)': ['mean', 'min', 'max'],
+        'Solar Flux (W/m²)': ['mean', 'min', 'max'],
+        'VPD (kPa)': ['mean', 'min', 'max'],
+    })
+
+    # Flatten multi-index columns
+    agg_df.columns = [' '.join(col).strip() for col in agg_df.columns.values]
+    agg_df = agg_df.reset_index()
+    agg_df[["Year", "Month", "Day"]] = agg_df[["Year", "Month", "Day"]].astype(int)
+    return agg_df
 
 # --- Preprocess USDA Yield Files ---
 def preprocess_usda_data(path, crop_name):
     try:
         df = pd.read_csv(path)
-
         df.rename(columns={
             "commodity_desc": "Crop Type",
             "year": "Year",
@@ -74,7 +98,6 @@ def preprocess_usda_data(path, crop_name):
         crop_key = commodity_map.get(crop_name, crop_name).lower()
         df_filtered = df[df["Crop Type"].str.lower() == crop_key]
 
-        # Try to find yield column dynamically
         yield_col = None
         for col in df_filtered.columns:
             if "yield" in col.lower() and "acre" in col.lower():
@@ -83,11 +106,10 @@ def preprocess_usda_data(path, crop_name):
 
         if not yield_col:
             logger.error(f"Yield column not found in file: {path}")
-            logger.error(f"Available columns: {list(df_filtered.columns)}")
             return {}
 
-        # Normalize column name
         df_filtered.rename(columns={yield_col: "Yield"}, inplace=True)
+        df_filtered.dropna(inplace=True)
 
         yield_by_fips = defaultdict(list)
         for _, row in df_filtered.iterrows():
@@ -103,44 +125,32 @@ def preprocess_usda_data(path, crop_name):
         logger.error(f"Error preprocessing USDA data at {path}: {e}")
         return {}
 
+# --- Gather All USDA Yields ---
+def get_all_usda_yields():
+    usda_base = Path(raw_data_root) / "USDA Crop Dataset" / "data"
+    yield_by_fips_crop = defaultdict(lambda: defaultdict(list))
 
-# --- Save Weather ---
-def save_weather_data(df, fips_code, year):
-    out_dir = Path(transformed_data_root) / fips_code / str(year)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"WeatherTimeSeries{year}.csv"
-    df.to_csv(out_path, index=False)
-    logger.info(f"Saved weather data: {out_path}")
+    if not usda_base.exists():
+        logger.warning("No USDA data found.")
+        return yield_by_fips_crop
 
-# --- Save Crop Yield ---
-def save_crop_yield(fips_code, crop, new_records):
-    out_dir = Path(transformed_data_root) / fips_code
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{crop.lower()}.json"
+    for crop in crops:
+        crop_dir = usda_base / crop
+        if not crop_dir.exists():
+            continue
+        for year_dir in crop_dir.iterdir():
+            if not year_dir.is_dir():
+                continue
+            for file in year_dir.glob("*.csv"):
+                yield_by_fips = preprocess_usda_data(file, crop)
+                for fips_code, records in yield_by_fips.items():
+                    yield_by_fips_crop[fips_code][crop].extend(records)
 
-    existing = []
-    if out_path.exists():
-        try:
-            with open(out_path, "r") as f:
-                existing = json.load(f)
-        except Exception as e:
-            logger.warning(f"Could not read existing file {out_path}: {e}")
+    return yield_by_fips_crop
 
-    # Merge and deduplicate by year
-    all_records = {r["year"]: r for r in existing}
-    for r in new_records:
-        all_records[r["year"]] = r  # This will update or add
-
-    merged_records = sorted(all_records.values(), key=lambda x: x["year"])
-
-    with open(out_path, "w") as f:
-        json.dump(merged_records, f, indent=2)
-
-    logger.info(f"Updated yield data: {out_path}")
-
-# --- HRRR Processor ---
+# --- Process Weather and Collect Records ---
 def process_weather_data():
-    hrrr_base = Path(raw_data_root) / "HRRR" / "data"
+    hrrr_base = Path(raw_data_root) / "WRF-HRRR Computed dataset" / "data"
     if not hrrr_base.exists():
         logger.warning("No HRRR data found.")
         return
@@ -161,71 +171,34 @@ def process_weather_data():
             if df is None:
                 continue
 
+            df["FIPS"] = df["FIPS"].astype(int).apply(lambda x: f"{x:05d}")
+            df["Year"] = df["Year"].astype(int)
+
             for fips_code in df["FIPS"].unique():
-                fips_df = df[df["FIPS"] == fips_code]
-                save_weather_data(fips_df, str(fips_code), year)
-
-# --- USDA Processor ---
-def process_usda_data():
-    usda_base = Path(raw_data_root) / "USDA" / "data"
-    if not usda_base.exists():
-        logger.warning("No USDA data found.")
-        return
-
-    for crop in crops:
-        crop_dir = usda_base / crop
-        if not crop_dir.exists():
-            continue
-        for year_dir in crop_dir.iterdir():
-            if not year_dir.is_dir():
-                continue
-            for file in year_dir.glob("*.csv"):
-                yield_by_fips = preprocess_usda_data(file, crop)
-                for fips_code, records in yield_by_fips.items():
-                    save_crop_yield(fips_code, crop, records)
-
-def build_final_dataset():
-    all_records = []
-
-    for fips_dir in Path(transformed_data_root).iterdir():
-        if not fips_dir.is_dir():
-            continue
-
-        for year_dir in fips_dir.iterdir():
-            if not year_dir.is_dir():
-                continue
-
-            weather_file = year_dir / f"WeatherTimeSeries{year_dir.name}.csv"
-            if not weather_file.exists():
-                continue
-
-            try:
-                df = pd.read_csv(weather_file)
-                df["FIPS"] = fips_dir.name
-                year = int(year_dir.name)
-
+                fips_df = df[df["FIPS"] == fips_code].copy()
                 for crop in crops:
-                    crop_file = fips_dir / f"{crop.lower()}.json"
-                    yield_val = 0
-                    if crop_file.exists():
-                        with open(crop_file) as f:
-                            crop_yields = json.load(f)
-                            for entry in crop_yields:
-                                if entry["year"] == year:
-                                    yield_val = entry["yield"]
-                                    break
-                    df[f"yield_{crop.lower()}"] = yield_val
+                    fips_df[f"yield_{crop.lower()}"] = 0
+                combined_records.append(fips_df)
 
-                all_records.append(df)
-
-            except Exception as e:
-                logger.error(f"Failed processing {weather_file}: {e}")
-
-    if not all_records:
-        logger.warning("No combined data to process.")
+# --- Build Dataset ---
+def build_final_dataset_in_memory():
+    logger.info("Building final dataset from in-memory records")
+    if not combined_records:
+        logger.warning("No weather records to process.")
         return
 
-    full_df = pd.concat(all_records, ignore_index=True)
+    full_df = pd.concat(combined_records, ignore_index=True)
+    yield_lookup = get_all_usda_yields()
+
+    for i, row in full_df.iterrows():
+        fips = row["FIPS"]
+        year = int(row["Year"])
+        for crop in crops:
+            crop_yields = yield_lookup.get(fips, {}).get(crop, [])
+            for entry in crop_yields:
+                if entry["year"] == year:
+                    full_df.at[i, f"yield_{crop.lower()}"] = entry["yield"]
+                    break
 
     training_years = {"2017", "2018", "2019", "2020"}
     val_test_year = "2021"
@@ -233,37 +206,26 @@ def build_final_dataset():
     training_df = full_df[full_df["Year"].astype(str).isin(training_years)]
     year_2022_df = full_df[full_df["Year"].astype(str) == val_test_year]
 
-    val_df = year_2022_df.sample(frac=0.5, random_state=42)
-    test_df = year_2022_df.drop(val_df.index)
+    val_df = year_2022_df[year_2022_df["Day"] % 2 == 1]
+    test_df = year_2022_df[year_2022_df["Day"] % 2 == 0]
 
-    # Save final datasets
-    training_path = Path(transformed_data_root) / "training.csv"
-    val_path = Path(transformed_data_root) / "val.csv"
-    test_path = Path(transformed_data_root) / "test.csv"
+    # Output datasets
+    training_df.to_csv(Path(transformed_data_root) / "training.csv", index=False)
+    test_df.to_csv(Path(transformed_data_root) / "test.csv", index=False)
 
-    training_df.to_csv(training_path, index=False)
-    val_df.to_csv(val_path, index=False)
-    test_df.to_csv(test_path, index=False)
+    prod_dir = Path(transformed_data_root) / "production" 
+    prod_dir.mkdir(parents=True, exist_ok=True)
+    val_df[val_df["Day"] % 3 == 0].to_csv(prod_dir / "dev.csv", index=False)
+    val_df[val_df["Day"] % 3 == 1].to_csv(prod_dir / "staging.csv", index=False)
+    val_df[val_df["Day"] % 3 == 2].to_csv(prod_dir / "canary.csv", index=False)
 
-    logger.info("Datasets saved: training.csv, val.csv, test.csv")
+    logger.info("Saved training.csv, test.csv, and production split files.")
 
-    # --- Cleanup ---
-    for item in Path(transformed_data_root).iterdir():
-        if item.is_dir():
-            shutil.rmtree(item)
-        elif item.name not in {"training.csv", "val.csv", "test.csv"}:
-            item.unlink()
-
-    logger.info("Cleanup complete. Only final datasets retained.")
-
-
-
-# --- Main Orchestration ---
+# --- Main ---
 def main():
     logger.info("=== Transform Pipeline Start ===")
     process_weather_data()
-    process_usda_data()
-    build_final_dataset()
+    build_final_dataset_in_memory()
     logger.info("=== Transform Pipeline Complete ===")
 
 if __name__ == "__main__":
