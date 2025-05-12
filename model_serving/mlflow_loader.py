@@ -225,77 +225,6 @@ async def _load_model_and_mappings_from_mlflow(app_settings: AppSettings):
             raise ConfigurationError(f"Failed to load model/mappings via MLflow: {e}. Fallback dummy also failed.") from e
 
 
-# --- Model Loading Function --- THIS FUNCTION SEEMS REDUNDANT NOW given the async loader
-# This function will now return the PyTorch model and the fips_mapping
-# def load_ml_model():
-#     """
-#     Loads the PyTorch ML model and associated artifacts from MLflow based on configuration settings.
-#     Returns a tuple: (pytorch_model, fips_mapping_dict).
-#     Raises ConfigurationError if settings are missing, or ModelServingBaseError if loading fails.
-#     """
-#     if not settings:
-#         logger.error("Cannot load model: Settings are not available.")
-#         raise ConfigurationError("MLflow settings are not configured.")
-#
-#     model_uri = f"models:/{settings.mlflow.model_name}/{settings.mlflow.model_stage}"
-#     fips_mapping_artifact_path = (
-#         "fips_mapping/fips_mapping.json"  # Path *within* the MLflow run artifact
-#     )
-#
-#     logger.info(
-#         "Attempting to load model and artifacts from MLflow", model_uri=model_uri
-#     )
-#
-#     try:
-#         # Load the PyTorch model
-#         pytorch_model = mlflow.pytorch.load_model(model_uri)
-#         logger.info("PyTorch model loaded successfully.")
-#
-#         # Load the FIPS mapping artifact
-#         # MLflow provides a way to download artifacts associated with the model version
-#         # Find the model version associated with the stage
-#         client = mlflow.tracking.MlflowClient()
-#         latest_version = client.get_latest_versions(
-#             settings.mlflow.model_name, stages=[settings.mlflow.model_stage]
-#         )[0]
-#         run_id = latest_version.run_id
-#
-#         # Download the artifact
-#         local_path = client.download_artifacts(run_id, fips_mapping_artifact_path)
-#         logger.info("FIPS mapping artifact downloaded", local_path=local_path)
-#
-#         # Read the JSON mapping
-#         with open(local_path, "r") as f:
-#             fips_mapping = json.load(f)
-#         logger.info("FIPS mapping loaded successfully.", num_entries=len(fips_mapping))
-#
-#         # Clean up the downloaded artifact file (optional, but good practice)
-#         # os.remove(local_path) # Careful with this if local_path is a directory! artifact_path="fips_mapping" logs a directory.
-#         # A safer way is to download to a temp dir and clean up the dir.
-#         import tempfile
-#
-#         with tempfile.TemporaryDirectory() as tmpdir:
-#             local_dir_path = client.download_artifacts(
-#                 run_id, "fips_mapping", dst_path=tmpdir
-#             )
-#             mapping_file_path = os.path.join(local_dir_path, "fips_mapping.json")
-#             with open(mapping_file_path, "r") as f:
-#                 fips_mapping = json.load(f)
-#             logger.info("FIPS mapping loaded from temporary directory.")
-#
-#         return pytorch_model, fips_mapping
-#
-#     except Exception as e:
-#         logger.error(
-#             "Error loading model or artifacts from MLflow", error=str(e), exc_info=True
-#         )
-#         # Wrap in custom exception for consistent handling
-#         raise ModelServingBaseError(
-#             f"Failed to load model or artifacts from MLflow: {e}"
-#         ) from e
-
-
-# --- Dependency Function ---
 async def get_model_and_mapping() -> Tuple[Any, Dict[str, int], Dict[str, int]]:
     """
     Provides the cached ML model, FIPS mapping, and Crop mapping.
@@ -316,6 +245,3 @@ async def get_model_and_mapping() -> Tuple[Any, Dict[str, int], Dict[str, int]]:
     model, fips_map, _, crop_map, _ = _cached_model_data
     return model, fips_map, crop_map
 
-
-# Update the `get_model` dependency in app.py and predict.py to `get_model_and_mapping`
-# and adjust where it's used to unpack the tuple.z

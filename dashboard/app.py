@@ -91,14 +91,24 @@ selected_crop = st.sidebar.selectbox(
 
 # Histogram Bins (fixed for now, could be made a user input later)
 # This should match the bins your model is trained for or expects.
-fixed_histogram_bins = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 175, 200, 225, 250, 300]
+# For the dummy model, which outputs 5 probabilities, we need 6 bin edges.
+# fixed_histogram_bins = [0, 50, 100, 150, 200, 250] # 6 edges = 5 bins
 # Example for corn: [0, 50, 100, 120, 140, 160, 180, 200, 220, 240, 260, 300, 350]
 
-st.sidebar.markdown("---_Note: Histogram bins are currently fixed._---")
+# st.sidebar.markdown("---_Note: Histogram bins are currently fixed for 5-bin output._---")
+
+histogram_bins_str = st.sidebar.text_input(
+    "Histogram Bin Edges (comma-separated)",
+    value="0, 50, 100, 150, 200, 250", # Default for 5 bins
+    help="Enter comma-separated numbers for bin edges, e.g., 0,20,40,60,80,100. Must be at least 2 edges, strictly increasing."
+)
+st.sidebar.markdown("---_Note: The number of bins implied (edges - 1) must match the model's output._---")
 
 
 # --- Main app layout ---
 if st.sidebar.button("Get Prediction"):
+    user_histogram_bins = []
+    valid_bins = False
     if not county_fips_input:
         st.error("Please enter a FIPS County Code.")
     elif not cut_off_date_input:
@@ -106,6 +116,20 @@ if st.sidebar.button("Get Prediction"):
     elif not selected_crop:
         st.error("Please select a Crop Type.")
     else:
+        try:
+            user_histogram_bins = [float(b.strip()) for b in histogram_bins_str.split(',') if b.strip()]
+            if len(user_histogram_bins) < 2:
+                st.error("Histogram bins must contain at least two edges.")
+            elif not all(user_histogram_bins[i] < user_histogram_bins[i+1] for i in range(len(user_histogram_bins)-1)):
+                st.error("Histogram bin edges must be strictly increasing values.")
+            else:
+                valid_bins = True
+        except ValueError:
+            st.error("Invalid input for histogram bin edges. Please enter comma-separated numbers (e.g., 0,50,100).")
+        except Exception as e:
+            st.error(f"Error processing histogram bins: {e}")
+
+    if valid_bins: # Proceed only if all inputs including bins are valid
         PREDICTION_REQUESTS.inc() # Increment counter for prediction requests
         LAST_PREDICTION_TIME.set_to_current_time()
         with st.spinner(f"Fetching prediction for {selected_crop} in {county_fips_input} for date {cut_off_date_input}..."):
@@ -115,7 +139,7 @@ if st.sidebar.button("Get Prediction"):
                     county_fips=county_fips_input,
                     cut_off_date=cut_off_date_input,
                     crop_name=selected_crop,
-                    histogram_bins=fixed_histogram_bins
+                    histogram_bins=user_histogram_bins # Use parsed user input
                 )
                 
                 if api_response and api_response.get("predicted_histogram"):
