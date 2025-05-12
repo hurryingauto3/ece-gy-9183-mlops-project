@@ -1,0 +1,55 @@
+{{- if .Values.rollout.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ include "inference.fullname" . }}-rollout
+spec:
+  replicas: {{ .Values.rollout.replicas }}
+  selector:
+    matchLabels:
+      app: {{ include "inference.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "inference.name" . }}
+        version: stable
+    spec:
+      containers:
+      - name: inference
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        ports:
+        - containerPort: {{ .Values.service.port }}
+  strategy:
+    canary:
+      stableService: {{ include "inference.fullname" . }}-stable
+      canaryService: {{ include "inference.fullname" . }}-canary
+      steps:
+      {{- range .Values.rollout.canarySteps }}
+        - setWeight: {{ .weight }}
+        - pause: {duration: {{ .pauseSeconds }}s}
+      {{- end }}
+      trafficRouting:
+        nginx:
+          stableIngress: {{ include "inference.fullname" . }}-ingress
+{{- else }}
+# fallback to a plain Deployment if rollout.enabled=false
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "inference.fullname" . }}
+spec:
+  replicas: {{ .Values.rollout.replicas }}
+  selector:
+    matchLabels:
+      app: {{ include "inference.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "inference.name" . }}
+    spec:
+      containers:
+      - name: inference
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        ports:
+        - containerPort: {{ .Values.service.port }}
+{{- end }}

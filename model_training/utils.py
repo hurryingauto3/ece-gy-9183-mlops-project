@@ -6,13 +6,12 @@ import tqdm
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 def collate_fn(batch):
-    xs = [b[0] for b in batch]
-    ys = [b[1] for b in batch]
-    fids = [b[2] for b in batch]
-    xs_p = nn.utils.rnn.pad_sequence(xs, batch_first=True)
-    ys_s = torch.stack(ys)
-    fid_t = torch.tensor(fids, dtype=torch.long)
-    return xs_p, ys_s, fid_t
+    x_list, y_list, fips_list, crop_list = zip(*batch)
+    x_pad = torch.nn.utils.rnn.pad_sequence(x_list, batch_first=True)
+    y = torch.stack(y_list)
+    fips = torch.tensor(fips_list)
+    crops = torch.tensor(crop_list)
+    return x_pad, y, fips, crops
 
 def train_model(model, train_loader: DataLoader,
                 num_epochs: int = 20,
