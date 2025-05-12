@@ -89,7 +89,7 @@ sections:
       Replace `<SERVICES_NODE_IP>` with the IP address of  services VM.
 
   
-  - title: 🧹 Delete Production Data from GPU After Verification
+  - title:  Delete Production Data from GPU After Verification
     
       After verifying the files are present and correct on the services node,
       remove the production data from the GPU node to prevent duplication and save space:
