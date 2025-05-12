@@ -8,7 +8,7 @@ This manual provides instructions for **setting up, running, logging, and promot
 
 Before using this module:
 
-* Processed data is available in an OpenStack Swift container as `features.csv` with crop yields and weather data.
+* Processed data is available in an OpenStack Swift container as 3 csvs with crop yields and weather data.
 * All relevant environment variables from `.env` are loaded.
 * A Docker environment is available to run this module locally or on a Chameleon GPU node.
 
@@ -125,7 +125,7 @@ This returns the yield prediction for the given crop and county-year.
 
 You will deploy a GPU Jupyter container using:
 
-* `model_training/Dockerfile`
+* `model_training/Dockerfile.jupyter`
 * SSH tunnel to expose Jupyter on port 8888
 
 Launch instructions will be added once the Terraform/Ansible pipeline is ready.
