@@ -5,7 +5,7 @@ description: >
 
 sections:
   - title: Directory Structure
-    content: |
+    
       ```
       etl_pipeline/
       ├── extract/
@@ -22,7 +22,7 @@ sections:
 
   - title: What the Pipeline Does
     
-    content: |
+    
       ### Extract Phase
       - Downloads HRRR and USDA datasets using `gdown` from Google Drive.
       - Filters out unwanted years (keeps 2017–2021).
@@ -43,7 +43,7 @@ sections:
           - `canary.csv`
 
   - title: Environment Setup (GPU Node)
-    content: |
+    
       ### 1. SSH into the GPU node
       ```bash
       ssh -i ~/.ssh/mlops_proj_key cc@A.B.C.D
@@ -62,7 +62,7 @@ sections:
       ```
 
   - title: Running the Pipeline (Docker Compose)
-    content: |
+    
       ### Build Services
       ```bash
       docker compose build etl-download etl-transform
@@ -79,7 +79,7 @@ sections:
       ```
 
   - title: Move Production Data to Services Node
-    content: |
+    
       From the GPU node, run the following to transfer production files:
       ```bash
       scp -i ~/.ssh/mlops_proj_key /mnt/swift_store/transformed_data/production/*.csv \
@@ -90,7 +90,7 @@ sections:
 
   
   - title: 🧹 Delete Production Data from GPU After Verification
-    content: |
+    
       After verifying the files are present and correct on the services node,
       remove the production data from the GPU node to prevent duplication and save space:
 
@@ -99,7 +99,7 @@ sections:
       ```
 
   - title: Outputs
-    content: |
+    
       After successful execution:
       ```
       /mnt/swift_store/
@@ -112,14 +112,14 @@ sections:
       ```
 
   - title: Requirements
-    content: |
+    
       - Python 3.8+
       - `gdown`, `pandas`
       - Docker + Docker Compose
       - Mounted volume at `/mnt/swift_store`
 
   - title: Summary
-    content: |
+    
       | Step     | Input                      | Output                                  |
       |----------|-----------------------------|-----------------------------------------|
       | Extract  | Google Drive folders        | `/mnt/swift_store/raw_data/`           |
