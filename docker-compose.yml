@@ -101,7 +101,7 @@ services:
       # --- MLflow Dummy Mode Configuration (for fallback if MLflow is unavailable) ---
       # DUMMY_MODE is false by default; fallback to dummy assets happens if MLflow load fails.
       # Set MLFLOW_DUMMY_MODE=true in .env to force dummy mode.
-      - MLFLOW_DUMMY_MODE=${MLFLOW_DUMMY_MODE:-false}
+      - MLFLOW_DUMMY_MODE=${MLFLOW_DUMMY_MODE:-true}
       # Paths for assets generated INSIDE the container by entrypoint.sh
       - MLFLOW_DUMMY_MODEL_PATH=/app/dummy_assets/dummy_model_state.pth
       - MLFLOW_DUMMY_FIPS_MAPPING_PATH=/app/dummy_assets/fips_to_id_mapping.json
@@ -159,6 +159,23 @@ services:
       - prometheus
       - mlflow  # Added dependency on mlflow service
 
+  # --- Streamlit Dashboard Service ---
+  dashboard:
+    profiles: ["services"]
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: dashboard-container
+    ports:
+      - "8501:8501"
+    environment:
+      - MODEL_SERVING_API_URL=http://model-serving:8000
+      # You can add other necessary environment variables for the dashboard here
+      # For example, if you want to control Streamlit's log level:
+      # - STREAMLIT_LOG_LEVEL=debug 
+    restart: unless-stopped
+    depends_on:
+      - model-serving # Dashboard needs the model-serving API to be available
 
 # --- ETL Job Service ---
 
