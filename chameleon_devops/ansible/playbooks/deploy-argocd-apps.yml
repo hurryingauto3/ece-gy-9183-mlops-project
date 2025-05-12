@@ -1,0 +1,41 @@
+---
+- name: Deploy Inference ArgoCD Applications
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    argocd_ns: argocd
+    app_manifests:
+      - manifests/argocd/app-inference-dev.yaml
+      - manifests/argocd/app-inference-staging.yaml
+      - manifests/argocd/app-inference-prod.yaml
+
+  tasks:
+    - name: Ensure target namespaces exist
+      k8s:
+        api_version: v1
+        kind: Namespace
+        name: "{{ item }}"
+        state: present
+      loop:
+        - inference-dev
+        - inference-staging
+        - inference-prod
+
+    - name: Apply ArgoCD Application CRs
+      k8s:
+        state: present
+        definition: "{{ lookup('file', item) }}"
+      loop: "{{ app_manifests }}"
+
+    - name: Wait for ArgoCD to report healthy apps
+      shell: |
+        for mf in {{ app_manifests | join(' ') }}; do
+          name=$(yq eval '.metadata.name' $mf)
+          until kubectl -n argocd get application/$name -o jsonpath='{.status.health.status}' | grep -q Healthy; do
+            sleep 5
+          done
+        done
+      args:
+        executable: /bin/bash
