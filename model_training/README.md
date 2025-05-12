@@ -1,169 +1,102 @@
-# AgriYieldPredictor: Model Training Operations Manual
+This module handles the full training pipeline for crop yield prediction using a deep learning model (LSTM + TCN). It includes data loading, model training, experiment tracking with MLflow, and model promotion.
 
-This manual provides instructions for **setting up, running, logging, and promoting** crop yield prediction models using the AgriYieldPredictor training system. The system uses MLflow for experiment tracking and model lifecycle management. This document assumes that data ingestion and serving infrastructure are handled by other subsystems.
-
+> ## Assumptions (Before this begins)
 ---
-
-## 0. Pre-Conditions
-
-Before using this module:
-
-* Processed data is available in an OpenStack Swift container as 3 csvs with crop yields and weather data.
-* All relevant environment variables from `.env` are loaded.
-* A Docker environment is available to run this module locally or on a Chameleon GPU node.
-
----
-
-## 1. Folder Structure
-
-```
-model_training/
-├── load_data.py           # Loads multi-crop CSV data
-├── fetch_data.py          # Downloads data from Swift, splits to train/eval/test
-├── model.py               # LSTM + TCN model class
-├── train.py               # Trains the model and logs to MLflow
-├── predict.py             # Runs inference using a model in the registry
-├── promote_model.py       # Promotes a model version to a stage
-├── utils.py               # Common training utilities
-└── Dockerfile             # Environment to be containerized for training
-```
-
----
-
-## 2. Required Environment Variables
-
-Ensure the following are set in your shell or container via `.env`:
+Processed weather + yield data is already available as local CSVs via Swift mount:
 
 ```bash
-# MLflow config
+/mnt/swift_store/transformed_data/train.csv
+
+/mnt/swift_store/transformed_data/eval.csv
+
+/mnt/swift_store/transformed_data/test.csv
+```
+
+MLflow server is already running (http://mlflow:5001) and set up to track experiments.
+
+All credentials (OpenStack + MLflow) are defined in .env.jupyter.
+
+Docker with GPU and Poetry is installed on the Chameleon node.
+
+---
+
+> ## Files
+
+```bash
+model_training/
+├── 01_control_centre.ipynb      # Main notebook to drive training, logging, promotion
+├── train.py                     # CLI version of training script
+├── model.py                     # LSTM + TCN model definition
+├── load_data.py                 # Dataset loading utilities
+├── promote_model.py             # Promotes model from "None" to Staging/Canary/Production
+├── utils.py                     # train_model(), evaluate_model(), collate_fn
+├── Dockerfile.jupyter           # Builds Jupyter container for interactive GPU work
+├── .env.jupyter                 # Stores env vars for Swift and MLflow access
+├── pyproject.toml / poetry.lock # Poetry environment files
+```
+🧠 Model Overview
+
+> Inputs: daily weather time series + FIPS + crop ID
+
+> Output: predicted yield for that crop
+
+>Model: LSTM + TCN, with embedding layers for region/crop
+
+🚀 Workflow Summary
+
+- Start Jupyter Server (on Chameleon GPU node)
+
+```bash
+# On GPU node
+docker compose --profile gpu up jupyter
+```
+2. Open Notebook and Configure Hyperparameters
+
+Edit config = {...} in 01_control_centre.ipynb.
+
+3. Run Training + Logging
+
+Loads train/eval data from Swift mount
+
+Builds and trains model
+
+Logs everything to MLflow: metrics, params, model file
+
+4. Promote Best Model
+
+export TARGET_STAGE=Production
+python promote_model.py
+
+Or run the corresponding cell in the notebook.
+
+🔧 Environment Setup
+
+Make sure .env.jupyter is present in model_training/ with:
+
 MLFLOW_TRACKING_URI=http://mlflow:5001
 MLFLOW_MODEL_NAME=AgriYieldPredictor
-MLFLOW_MODEL_STAGE=Production
-MLFLOW_EXPERIMENT_NAME="Crop Yield Training"
+MLFLOW_EXPERIMENT_NAME=Crop Yield Training
+OS_AUTH_URL=... # and other OpenStack credentials
 
-# OpenStack Swift config
-FS_OPENSTACK_SWIFT_CONTAINER_NAME=object-persist-project-4
-OS_AUTH_URL=...
-OS_APPLICATION_CREDENTIAL_ID=...
-OS_APPLICATION_CREDENTIAL_SECRET=...
-OS_REGION_NAME=CHI@TACC
-```
+✅ What This Covers
 
----
+Interactive notebook-based training
 
-## 3. Operational Commands
+CLI-based retraining (train.py)
 
-### 3.1 Fetch Data from Swift
+MLflow experiment tracking
 
-```bash
-python fetch_data.py --fips <FIPS_CODE> --crop <crop>
-```
+Manual promotion from "None" → Staging/Production
 
-Outputs 3 CSVs into the `output/` directory:
+🧪 What Happens After This
 
-* `<fips>_<crop>_training_data.csv`
-* `<fips>_<crop>_eval_data.csv`
-* `<fips>_<crop>_testing_data.csv`
+Inference API pulls model from MLflow Registry based on stage
 
-### 3.2 Train and Log Model to MLflow
+Prediction/inference handled by separate model-serving container (not in this repo)
 
-```bash
-python train.py \
-  --train-csv output/<fips>_<crop>_training_data.csv \
-  --eval-csv output/<fips>_<crop>_eval_data.csv \
-  --mlflow
-```
+🧼 Cleanup
 
-Logs the following to MLflow:
+Old models can be removed from MLflow UI manually
 
-* Parameters
-* RMSE/MAE metrics
-* GPU diagnostics
-* Model artifact
-* Registers model version to `AgriYieldPredictor`
+CSVs are not re-uploaded or transformed by this module
 
-### 3.3 Promote Model to Registry Stage
-
-```bash
-export TARGET_STAGE=Staging  # Options: Staging, Canary, Production
-python promote_model.py
-```
-
-This moves the latest model from "None" stage to the specified one.
-
-### 3.4 Run Prediction from Registry
-
-```bash
-python predict.py \
-  --stage Production \
-  --fips-id <fips_id> \
-  --crop-id <crop_id> \
-  --csv /path/to/input.csv
-```
-
-This returns the yield prediction for the given crop and county-year.
-
----
-
-## 4. Valid MLflow Stages
-
-* `None`: unpromoted version
-* `Staging`: approved for evaluation
-* `Canary`: under live testing
-* `Production`: used in serving endpoint
-
----
-
-## 5. Accessing MLflow & Artifacts
-
-* MLflow UI: `http://<your-floating-ip>:5001`
-* MinIO Browser: `http://<your-floating-ip>:9001`
-
----
-
-## 6. GPU Jupyter Training Environment (To Be Provisioned)
-
-You will deploy a GPU Jupyter container using:
-
-* `model_training/Dockerfile.jupyter`
-* SSH tunnel to expose Jupyter on port 8888
-
-```
-cd model_training
-docker build -f Dockerfile.jupyter -t agri-jupyter .
-```
-
-```
-docker run --rm -it \
-  --gpus all \
-  --env-file .env.jupyter \
-  -p 8888:8888 \
-  -v $PWD:/app \
-  agri-jupyter
-```
-
-That launches the container based on Dockerfile.jupyter, which runs jupyter notebook inside it.
-
----
-
-## 7. Maintenance
-
-* Old model versions can be deleted from the MLflow UI if no longer needed.
-* `output/` files can be cleaned up after promotion.
-
----
-
-## 8. Pre-Submission Checklist
-
-* [ ] Is `.env` loaded correctly in this shell/container?
-* [ ] Did `train.py` log metrics and artifacts to MLflow?
-* [ ] Was the model successfully registered?
-* [ ] Is the model visible under the expected stage?
-* [ ] Did `predict.py` return a valid scalar prediction?
-
----
-
-## Maintainers
-
-This training module is maintained by the Model Team for the Agri MLOps Project.
-Contact: @model-lead or refer to internal wiki for escalation.

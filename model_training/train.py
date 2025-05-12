@@ -7,6 +7,7 @@ from load_data import MultiCropYieldDataset
 from model import LSTMTCNRegressor
 from utils import collate_fn, train_model, evaluate_model
 import subprocess
+from config import config
 
 def parse_args():
     p = argparse.ArgumentParser(description="Train & register multi-crop yield model with MLflow")
@@ -41,11 +42,11 @@ def main():
         input_dim=input_dim,
         num_fips=num_fips,
         num_crops=num_crops,
-        fips_embedding_dim=16,
-        hidden_dim=64,
-        lstm_layers=1,
-        tcn_channels=[64, 32],
-        dropout_rate=0.1
+        fips_embedding_dim=config["fips_embedding_dim"],
+        hidden_dim=config["hidden_dim"],
+        lstm_layers=config["lstm_layers"],
+        tcn_channels=config["tcn_channels"],
+        dropout_rate=config["dropout_rate"]
     )
 
     # 3) MLflow logging
@@ -60,13 +61,8 @@ def main():
         mlflow.start_run(log_system_metrics=True)
 
         mlflow.log_params({
-            "batch_size": args.batch_size,
-            "epochs": args.epochs,
-            "lr": args.lr,
-            "hidden_dim": 64,
-            "tcn_channels": [64, 32],
-            "lstm_layers": 1,
-            "dropout": 0.1,
+            k: v if not isinstance(v, list) else str(v)
+            for k, v in config.items()
         })
 
         # Log GPU info
