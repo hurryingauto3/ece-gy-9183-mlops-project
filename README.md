@@ -119,8 +119,31 @@ The CropNet dataset is the primary data source for this project. It provides a c
 
 #### Continuous X
 
-1.  *Strategy:* Infrastructure (VMs, storage) will be defined as code (Terraform/`python-chi` in Git). Application configurations (Kubernetes manifests, service settings) will also be stored in Git and automatically applied to the K3s cluster. CI (using GitHub Actions) will handle testing and building Docker images. CD/CT will automate the end-to-end process: triggering training on Ray, evaluating, registering models in MLflow, deploying the API server to staging, running tests, and simulating promotion through canary to production environments, adhering to immutable infrastructure principles.
-2.  *Diagram Parts:* Git Repo (GitHub), CI/CD Tools (GitHub Actions), Container Registry, K8s Cluster (Staging/Canary/Prod namespaces), Ray Cluster, MLflow Server.
+1.  *Strategy:* Infrastructure (VMs, storage) are be defined as code (Terraform + Ansible). Application configurations (Kubernetes manifests, service settings) will also be stored in Git and automatically applied to the K3s cluster. CI (using ArgoCD) will handle testing and building Docker images. CD/CT will automate the end-to-end process: triggering training and retraining, evaluating, registering models in MLflow, deploying the API server to staging, running tests, and simulating promotion through canary to production environments, adhering to immutable infrastructure principles.
+2.  *Diagram Parts:* Git Repo (GitHub), CI/CD Tools (ArgoCD Workflows), Cron Jobs, Container Registry, K8s Cluster (Staging/Canary/Prod namespaces), Ray Cluster, MLflow Server.
 3.  *Justification & Lecture Link (Unit 3):* This implements a fully automated, reproducible MLOps workflow using IaC, GitOps, CI/CD/CT pipelines, containerization, and staged deployments, directly applying the core DevOps and cloud-native principles from Unit 3.
-4.  *Specifics & Requirements:* Terraform/python-chi defines infra. K8s YAML defines apps. This satisfies **Unit 3** (IaC, Cloud-native principles, CI/CD/CT pipeline, Staged deployment).
-7.  *Difficulty Points Attempted:* *Unit 1: Composed of multiple models.* (The system design inherently supports multiple interacting models - yield predictor, potentially recommender, integrated and managed via this Continuous X pipeline).
+4.  *Specifics & Requirements:* Terraform defines infra. Ansible playbooks define roles and tasks, Kubernetes YAML scripts define apps. This satisfies **Unit 3** (IaC, Cloud-native principles, CI/CD/CT pipeline, Staged deployment).
+5.  *Difficulty Points Attempted:* 
+    1.  *Unit 1: Composed of multiple models.* (The system design inherently supports multiple interacting models - yield predictor, potentially recommender, integrated and managed via this Continuous X pipeline).
+
+    2.  Unit 3 (DevOps): CI/CD and continuous training: The system has an automated pipeline that, in response to a trigger (a daily schedule, or an external condition), calls the retraining cron-workflow to re-train our model, runs the complete offline evaluation suite, and deploy it to a staging area for further testing (load testing via locust swarm).
+
+**A more detailed walkthrough of this is shown in [the setup guide to Infrastructure on Chameleon Cloud](chameleon_devops/README.md), which clearly outlines the steps and commands needed to run to automate the resource allocation, provisioning and initialization.**
+
+| Port | Service              | Role in This Project                                                                                 |
+|------|----------------------|-------------------------------------------------------------------------------------------------------|
+| 5000 | MLflow               | Experiment tracking and model registry for all training runs; CI/CD pipeline registers/promotes models here. |
+| 3000 | Grafana              | Live dashboards displaying metrics collected by Prometheus (system health, model latency, drift alerts). |
+| 9090 | Prometheus           | Scrapes metrics from Kubernetes pods, FastAPI, Ray, and MLflow; feeds alerts & dashboards.            |
+| 9000 | MinIO                | S3‑compatible object store holding datasets, training artifacts, and exported model binaries.         |
+| 9001 | MinIO Console        | Web UI to manage MinIO buckets / objects (data snapshots, model checkpoints).                         |
+| 8000 | FastAPI              | Online inference endpoint serving the latest canary/production model images.                         |
+| 8265 | Ray Dashboard        | Monitoring UI for the Ray cluster that runs distributed training, hyper‑parameter searches, and ETL. |
+|10001 | Ray Client           | Remote client port for developers / CI jobs to submit Ray tasks to the cluster.                       |
+| 8501 | DataViz Dashboard    | Custom Streamlit/Gradio UI for interactive exploration of predictions and error analysis.            |
+| 80   | Argo CD HTTP         | GitOps web interface to visualize Kubernetes deployment state and promotion pipelines.                |
+| 443  | Argo CD HTTPS | Secure API endpoint used by ArgoCD to sync and promote manifests across staging/canary/prod. |
+| 8089 | Locust Swarm         | Generates load against FastAPI to validate autoscaling targets and regression performance.            |
+
+
+All major components are included: a managed Kubernetes cluster  hosting model training and serving containers, a Docker/OCI registry for container images, an MLflow server for experiment tracking, and monitoring tools (Prometheus/Grafana and Locust Swarm) collecting data and model performance. The pipeline orchestration runs on ArgoCD, which integrates with the repository (code, data versioning) and triggers automated jobs.
