@@ -99,19 +99,15 @@ logger = structlog.get_logger(__name__)
 default_limit = "10/minute" # Single prediction default
 default_batch_limit = "5/minute" # Batch prediction default
 
-# MODIFIED: Stripped down for extreme debugging of the call signature
 def get_dynamic_predict_limit(request: Request) -> str:
     print(f"!!! DEBUG: get_dynamic_predict_limit CALLED. Request type: {type(request)}")
-    logger.info(f"!!! DEBUG: get_dynamic_predict_limit CALLED. Request type: {type(request)}")
     # Directly return default_limit to avoid any other potential errors within this function
     return default_limit
 
-# MODIFIED: Stripped down for extreme debugging of the call signature
-def get_dynamic_predict_batch_limit(request: Request) -> str:
-    print(f"!!! DEBUG: get_dynamic_predict_batch_limit CALLED. Request type: {type(request)}")
-    logger.info(f"!!! DEBUG: get_dynamic_predict_batch_limit CALLED. Request type: {type(request)}")
-    # Directly return default_batch_limit to avoid any other potential errors within this function
-    return default_batch_limit
+# def get_dynamic_predict_batch_limit(request: Request) -> str:
+#     print(f"!!! DEBUG: get_dynamic_predict_batch_limit CALLED. Request type: {type(request)}")
+#     # Directly return default_batch_limit to avoid any other potential errors within this function
+#     return default_batch_limit
 
 limiter = Limiter(
     key_func=get_remote_address,
@@ -184,9 +180,6 @@ async def log_requests(request: Request, call_next):
     )
     structlog.contextvars.clear_contextvars()
     return response
-
-
-# --- API Endpoints with Tags and Descriptions ---
 
 
 @app.post(
@@ -268,52 +261,52 @@ async def get_prediction(
     return prediction_output # This is already a BatchPredictionResponseItem
 
 
-@app.post(
-    "/predict_batch",
-    response_model=BatchPredictionResponse,
-    tags=["Predictions"],
-    summary="Get multiple yield histogram predictions in batch",
-    description="Fetch features concurrently and predict yield histograms for multiple county/year/crop/date combinations.",
-    response_description="A list of histogram prediction results or errors for each item in the batch request.",
-)
-# @limiter.limit(
-#     get_dynamic_predict_batch_limit  # Use the new async helper function
+# @app.post(
+#     "/predict_batch",
+#     response_model=BatchPredictionResponse,
+#     tags=["Predictions"],
+#     summary="Get multiple yield histogram predictions in batch",
+#     description="Fetch features concurrently and predict yield histograms for multiple county/year/crop/date combinations.",
+#     response_description="A list of histogram prediction results or errors for each item in the batch request.",
 # )
-async def get_batch_predictions(
-    request: Request, # Passed by SlowAPI middleware
-    batch_req: BatchPredictionRequest = Body(
-        ...,
-        example=BatchPredictionRequest(
-            requests=[
-                PredictionRequest(
-                    county="19153", 
-                    year=2023, 
-                    cut_off_date="2023-08-01", 
-                    crop="corn", 
-                    histogram_bins=[0, 50, 100, 150, 200, 250]
-                ),
-                PredictionRequest(
-                    county="17031", 
-                    year=2022, 
-                    cut_off_date="2022-07-15", 
-                    crop="soybeans", 
-                    histogram_bins=[0, 20, 40, 60, 80]
-                )
-            ]
-        ).model_dump()
-    ),
-    model_data=Depends(get_model_and_mapping), # model, fips_map, crop_map
-):
-    model, fips_mapping, crop_mapping = model_data # Unpack
+# # @limiter.limit(
+# #     get_dynamic_predict_batch_limit  # Use the new async helper function
+# # )
+# async def get_batch_predictions(
+#     request: Request, # Passed by SlowAPI middleware
+#     batch_req: BatchPredictionRequest = Body(
+#         ...,
+#         example=BatchPredictionRequest(
+#             requests=[
+#                 PredictionRequest(
+#                     county="19153", 
+#                     year=2023, 
+#                     cut_off_date="2023-08-01", 
+#                     crop="corn", 
+#                     histogram_bins=[0, 50, 100, 150, 200, 250]
+#                 ),
+#                 PredictionRequest(
+#                     county="17031", 
+#                     year=2022, 
+#                     cut_off_date="2022-07-15", 
+#                     crop="soybeans", 
+#                     histogram_bins=[0, 20, 40, 60, 80]
+#                 )
+#             ]
+#         ).model_dump()
+#     ),
+#     model_data=Depends(get_model_and_mapping), # model, fips_map, crop_map
+# ):
+#     model, fips_mapping, crop_mapping = model_data # Unpack
 
-    # Call the batch prediction function (which needs to be updated)
-    results = await predict_yield_batch(
-        model=model,
-        fips_mapping=fips_mapping,
-        crop_mapping=crop_mapping, # Pass crop_mapping
-        requests=batch_req.requests # Pass the list of PredictionRequest objects
-    )
-    return BatchPredictionResponse(responses=results)
+#     # Call the batch prediction function (which needs to be updated)
+#     results = await predict_yield_batch(
+#         model=model,
+#         fips_mapping=fips_mapping,
+#         crop_mapping=crop_mapping, # Pass crop_mapping
+#         requests=batch_req.requests # Pass the list of PredictionRequest objects
+#     )
+#     return BatchPredictionResponse(responses=results)
 
 
 # --- Model Info Endpoint ---

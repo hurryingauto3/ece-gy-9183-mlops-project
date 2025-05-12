@@ -1,12 +1,10 @@
 import pandas as pd
 import structlog  # Import structlog
 import httpx
-import asyncio
 import time  # Import time for latency measurement
 from typing import List, Dict, Any, Tuple, Optional
 from .mlflow_loader import (
     settings,
-    get_model_and_mapping,
     get_app_settings,
 )  # Import the dependency function here too
 from .schemas import PredictionRequest, BatchPredictionResponseItem # Added Pydantic models
@@ -312,81 +310,81 @@ async def predict_yield(
         raise ModelServingBaseError("An unexpected error occurred during yield prediction.") from e
 
 
-async def predict_yield_batch(
-    model: Any, 
-    fips_mapping: Dict[str, int], 
-    crop_mapping: Dict[str, int], 
-    requests: List[PredictionRequest] # Changed to List[PredictionRequest]
-) -> List[BatchPredictionResponseItem]:
-    """Processes a batch of prediction requests concurrently."""
-    log = logger.bind(batch_size=len(requests))
-    log.info("Starting batch histogram prediction")
+# async def predict_yield_batch(
+#     model: Any, 
+#     fips_mapping: Dict[str, int], 
+#     crop_mapping: Dict[str, int], 
+#     requests: List[PredictionRequest] # Changed to List[PredictionRequest]
+# ) -> List[BatchPredictionResponseItem]:
+#     """Processes a batch of prediction requests concurrently."""
+#     log = logger.bind(batch_size=len(requests))
+#     log.info("Starting batch histogram prediction")
 
-    # Create a list of coroutines for each prediction
-    # Each item in `requests` is a Pydantic `PredictionRequest` model
-    tasks = [
-        predict_yield(
-            model=model,
-            fips_mapping=fips_mapping,
-            crop_mapping=crop_mapping,
-            county=req.county,
-            year=req.year,
-            cut_off_date=req.cut_off_date,
-            crop_name=req.crop,
-            histogram_bins=req.histogram_bins
-        )
-        for req in requests
-    ]
+#     # Create a list of coroutines for each prediction
+#     # Each item in `requests` is a Pydantic `PredictionRequest` model
+#     tasks = [
+#         predict_yield(
+#             model=model,
+#             fips_mapping=fips_mapping,
+#             crop_mapping=crop_mapping,
+#             county=req.county,
+#             year=req.year,
+#             cut_off_date=req.cut_off_date,
+#             crop_name=req.crop,
+#             histogram_bins=req.histogram_bins
+#         )
+#         for req in requests
+#     ]
 
-    # Run all prediction tasks concurrently and gather results
-    # `return_exceptions=True` allows us to get exceptions instead of failing the whole batch
-    results_or_exceptions = await asyncio.gather(*tasks, return_exceptions=True)
+#     # Run all prediction tasks concurrently and gather results
+#     # `return_exceptions=True` allows us to get exceptions instead of failing the whole batch
+#     results_or_exceptions = await asyncio.gather(*tasks, return_exceptions=True)
 
-    # Process results to form BatchPredictionResponseItem list
-    response_items: List[BatchPredictionResponseItem] = []
-    for i, res_or_exc in enumerate(results_or_exceptions):
-        req_item = requests[i] # Original request for context
-        item_log = logger.bind(county=req_item.county, year=req_item.year, crop=req_item.crop, cut_off_date=str(req_item.cut_off_date))
+#     # Process results to form BatchPredictionResponseItem list
+#     response_items: List[BatchPredictionResponseItem] = []
+#     for i, res_or_exc in enumerate(results_or_exceptions):
+#         req_item = requests[i] # Original request for context
+#         item_log = logger.bind(county=req_item.county, year=req_item.year, crop=req_item.crop, cut_off_date=str(req_item.cut_off_date))
 
-        if isinstance(res_or_exc, Exception):
-            error_message = f"Error processing item: {type(res_or_exc).__name__} - {str(res_or_exc)}"
-            item_log.warning("Item in batch failed", error=error_message, exc_info=False) # exc_info=False to avoid large logs for common errors
-            response_items.append(
-                BatchPredictionResponseItem(
-                    county=req_item.county,
-                    year=req_item.year,
-                    cut_off_date=req_item.cut_off_date,
-                    crop=req_item.crop,
-                    predicted_histogram=None,
-                    error=error_message
-                )
-            )
-            BATCH_PREDICTION_OUTCOMES.labels(outcome="error").inc()
-        else:
-            # res_or_exc is the histogram dictionary
-            item_log.info("Item in batch succeeded")
-            response_items.append(
-                BatchPredictionResponseItem(
-                    county=req_item.county,
-                    year=req_item.year,
-                    cut_off_date=req_item.cut_off_date,
-                    crop=req_item.crop,
-                    predicted_histogram=res_or_exc, # This is the histogram dict
-                    error=None
-                )
-            )
-            BATCH_PREDICTION_OUTCOMES.labels(outcome="success").inc()
-            # TODO: Add Prometheus histogram metric observation if applicable from res_or_exc
-            # For example, if you want to observe the mean of the predicted distribution:
-            # mean_pred = calculate_mean_from_histogram(res_or_exc["bin_edges"], res_or_exc["probabilities"])
-            # PREDICTED_YIELD_DISTRIBUTION.observe(mean_pred)
+#         if isinstance(res_or_exc, Exception):
+#             error_message = f"Error processing item: {type(res_or_exc).__name__} - {str(res_or_exc)}"
+#             item_log.warning("Item in batch failed", error=error_message, exc_info=False) # exc_info=False to avoid large logs for common errors
+#             response_items.append(
+#                 BatchPredictionResponseItem(
+#                     county=req_item.county,
+#                     year=req_item.year,
+#                     cut_off_date=req_item.cut_off_date,
+#                     crop=req_item.crop,
+#                     predicted_histogram=None,
+#                     error=error_message
+#                 )
+#             )
+#             BATCH_PREDICTION_OUTCOMES.labels(outcome="error").inc()
+#         else:
+#             # res_or_exc is the histogram dictionary
+#             item_log.info("Item in batch succeeded")
+#             response_items.append(
+#                 BatchPredictionResponseItem(
+#                     county=req_item.county,
+#                     year=req_item.year,
+#                     cut_off_date=req_item.cut_off_date,
+#                     crop=req_item.crop,
+#                     predicted_histogram=res_or_exc, # This is the histogram dict
+#                     error=None
+#                 )
+#             )
+#             BATCH_PREDICTION_OUTCOMES.labels(outcome="success").inc()
+#             # TODO: Add Prometheus histogram metric observation if applicable from res_or_exc
+#             # For example, if you want to observe the mean of the predicted distribution:
+#             # mean_pred = calculate_mean_from_histogram(res_or_exc["bin_edges"], res_or_exc["probabilities"])
+#             # PREDICTED_YIELD_DISTRIBUTION.observe(mean_pred)
 
-        # Log for monitoring (simplified for batch)
-        log_prediction_for_monitoring(
-            request_data=req_item.model_dump(), # Log the full request
-            prediction=res_or_exc if not isinstance(res_or_exc, Exception) else None,
-            error=str(res_or_exc) if isinstance(res_or_exc, Exception) else None
-        )
+#         # Log for monitoring (simplified for batch)
+#         log_prediction_for_monitoring(
+#             request_data=req_item.model_dump(), # Log the full request
+#             prediction=res_or_exc if not isinstance(res_or_exc, Exception) else None,
+#             error=str(res_or_exc) if isinstance(res_or_exc, Exception) else None
+#         )
 
-    log.info("Batch histogram prediction processing complete")
-    return response_items
+#     log.info("Batch histogram prediction processing complete")
+#     return response_items
