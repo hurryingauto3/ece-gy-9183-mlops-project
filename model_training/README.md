@@ -128,7 +128,21 @@ You will deploy a GPU Jupyter container using:
 * `model_training/Dockerfile.jupyter`
 * SSH tunnel to expose Jupyter on port 8888
 
-Launch instructions will be added once the Terraform/Ansible pipeline is ready.
+```
+cd model_training
+docker build -f Dockerfile.jupyter -t agri-jupyter .
+```
+
+```
+docker run --rm -it \
+  --gpus all \
+  --env-file .env.jupyter \
+  -p 8888:8888 \
+  -v $PWD:/app \
+  agri-jupyter
+```
+
+That launches the container based on Dockerfile.jupyter, which runs jupyter notebook inside it.
 
 ---
 
