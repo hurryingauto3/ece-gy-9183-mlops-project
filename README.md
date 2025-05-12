@@ -85,7 +85,6 @@ The CropNet dataset is the primary data source for this project. It provides a c
         *   The main model serving logic resides in the `model_serving/` directory.
         *   `model_serving/app.py`: Implements the FastAPI application. It defines the primary API endpoints:
             *   `/predict`: Accepts a county FIPS code, year, cut-off date, crop type, and desired histogram bins. It orchestrates feature retrieval, model inference, and returns a predicted yield histogram.
-            *   `/predict_batch`: Designed to handle multiple prediction requests concurrently for improved throughput.
             *   `/health`: Provides a health check endpoint to verify the service status and its dependencies.
             *   `/model_info`: Returns details about the ML model currently loaded by the service (e.g., name, stage from MLflow or dummy status).
         *   `model_serving/predict.py`: Contains the core prediction workflow, including fetching features from the Feature Service, preparing tensors for the model, executing model inference, and formatting the output histogram.
@@ -105,9 +104,14 @@ The CropNet dataset is the primary data source for this project. It provides a c
         *   Model accuracy is evaluated post-training using standard metrics (RMSE, MAE, R²).
         *   The service includes a *framework* for basic data drift detection (`model_serving/drift.py`) by logging predictions for offline analysis. The core drift detection logic (`check_data_drift`) is currently a placeholder and would require implementing baseline statistics. Seasonal performance checks are planned.
         *   Basic API load testing has been implemented using Locust. Locust is configured as a separate Dockerized service (`locust-service` in `docker-compose.yml` under a "testing" profile) with its test definitions in `locust/locustfile.py`. It simulates concurrent users against the `/predict` (model-serving) and `/features` (feature-serving) endpoints, helping to identify performance characteristics under load.
+
+
+
 6.  *Unit Requirements Satisfied:* Unit 6: API for serving, Docker/K8s deployment; basic load testing (implemented with a dedicated Dockerized Locust service `monitoring/locust.py`), simple monitoring (Prometheus Grafana operational metrics). Feedback loop (logging for future drift/performance analysis) is not implemented.
 
 7.  *Difficulty Points Attempted:* *Unit 7: Monitor for data drift.* The system includes the initial framework for data drift monitoring by logging prediction inputs and outputs, with placeholder functions for actual drift detection logic.
+
+The full README for the model serving component is available [here](model_serving/README.md).
 
 #### Data pipeline
 
