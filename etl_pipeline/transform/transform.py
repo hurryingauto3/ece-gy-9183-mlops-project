@@ -139,8 +139,13 @@ def save_weather_data(df, fips_code, year):
     out_dir = Path(transformed_data_root) / fips_code / str(year)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"WeatherTimeSeries{year}.csv"
+
+    # Reformat FIPS column to 5-digit string
+    df["FIPS"] = df["FIPS"].astype(int).apply(lambda x: f"{x:05d}")
+
     df.to_csv(out_path, index=False)
     logger.info(f"Saved weather data: {out_path}")
+
 
 # --- Save Crop Yield ---
 def save_crop_yield(fips_code, crop, new_records):
@@ -193,6 +198,7 @@ def process_weather_data():
                 continue
 
             for fips_code in df["FIPS"].unique():
+                df["FIPS"] = df["FIPS"].astype(int).apply(lambda x: f"{x:05d}")
                 fips_df = df[df["FIPS"] == fips_code]
                 save_weather_data(fips_df, str(fips_code), year)
 
