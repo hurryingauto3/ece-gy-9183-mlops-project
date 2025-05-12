@@ -176,6 +176,24 @@ services:
     depends_on:
       - model-serving # Dashboard needs the model-serving API to be available
 
+  # --- Locust Load Testing Service ---
+  locust-service:
+    profiles: ["testing"] # Only run when explicitly requested
+    build:
+      context: ./monitoring
+      dockerfile: Dockerfile
+    container_name: locust-container
+    ports:
+      - "8089:8089" # Locust web UI
+    # The locustfile.py inside the container is configured to use 
+    # http://model-serving:8000 and http://feature-service:8001 as hosts.
+    # Ensure this service is on the same network as model-serving and feature-service.
+    # Docker Compose typically handles this by default by creating a default network.
+    depends_on:
+      - model-serving
+      - feature-serving
+    # command: -f /mnt/locust/locustfile.py --headless -u 10 -r 2 --run-time 1m # Example headless run
+
 # --- ETL Job Service ---
 
   # etl-download:

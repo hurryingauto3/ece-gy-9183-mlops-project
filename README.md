@@ -95,7 +95,7 @@ The CropNet dataset is the primary data source for this project. It provides a c
         *   A key feature is its **graceful fallback mechanism**. If the MLflow server is unavailable, or if the specified model/artifacts cannot be loaded, the service automatically defaults to using a `DummyLSTMTCNHistogramPredictor` (defined in `model_training/model.py`). This ensures service availability for testing and development even without a live MLflow backend.
     *   **On-the-Fly Dummy Asset Generation:**
         *   The `model_serving/entrypoint.sh` script is executed when the Docker container starts.
-        *   It calls `model_training/generate_dummy_assets.py`, which creates the necessary dummy model state file (`dummy_model_state.pth`) and dummy mapping files (`fips_to_id_mapping.json`, `crop_to_id_mapping.json`) directly within the container (typically in `/app/dummy_assets`).
+        *   It calls a script originally from `model_training/generate_dummy_assets.py` (copied into the container as `/app/asset_generator_tools/generate_assets.py`), which creates the necessary dummy model state file (`dummy_model_state.pth`) and dummy mapping files (`fips_to_id_mapping.json`, `crop_to_id_mapping.json`) directly within the container (typically in `/app/dummy_assets`).
         *   This internal generation ensures that the fallback mechanism works seamlessly without needing pre-existing dummy files to be mounted from the host system.
     *   **Containerization & Configuration:**
         *   The service is containerized using `model_serving/Dockerfile`. This Dockerfile sets up the Python environment, copies the application code (including the asset generation tools from `model_training/`), and defines the `entrypoint.sh` as the startup command.
@@ -103,9 +103,11 @@ The CropNet dataset is the primary data source for this project. It provides a c
     *   **Performance Goals & Basic Monitoring:**
         *   The service aims for a sub-2-second response time for single predictions and targets support for at least 10 concurrent users.
         *   Model accuracy is evaluated post-training using standard metrics (RMSE, MAE, R²).
-        *   Basic monitoring for significant input data changes (data drift) is planned to ensure model reliability over time.
-6.  *Unit Requirements Satisfied:* Unit 6: API for serving, Docker/K8s deployment; Unit 7: Offline evaluation, basic load testing, simple monitoring and feedback loop.
-7.  *Difficulty Points Attempted:* *Unit 7: Monitor for data drift.* Added basic data drift detection and seasonal performance checks to catch problems early.
+        *   The service includes a *framework* for basic data drift detection (`model_serving/drift.py`) by logging predictions for offline analysis. The core drift detection logic (`check_data_drift`) is currently a placeholder and would require implementing baseline statistics. Seasonal performance checks are planned.
+        *   Basic API load testing has been implemented using Locust. Locust is configured as a separate Dockerized service (`locust-service` in `docker-compose.yml` under a "testing" profile) with its test definitions in `locust/locustfile.py`. It simulates concurrent users against the `/predict` (model-serving) and `/features` (feature-serving) endpoints, helping to identify performance characteristics under load.
+6.  *Unit Requirements Satisfied:* Unit 6: API for serving, Docker/K8s deployment; basic load testing (implemented with a dedicated Dockerized Locust service `monitoring/locust.py`), simple monitoring (Prometheus Grafana operational metrics). Feedback loop (logging for future drift/performance analysis) is not implemented.
+
+7.  *Difficulty Points Attempted:* *Unit 7: Monitor for data drift.* The system includes the initial framework for data drift monitoring by logging prediction inputs and outputs, with placeholder functions for actual drift detection logic.
 
 #### Data pipeline
 
