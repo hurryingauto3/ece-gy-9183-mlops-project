@@ -8,7 +8,7 @@ This manual provides instructions for **setting up, running, logging, and promot
 
 Before using this module:
 
-* Processed data is available in an OpenStack Swift container as `features.csv` with crop yields and weather data.
+* Processed data is available in an OpenStack Swift container as 3 csvs with crop yields and weather data.
 * All relevant environment variables from `.env` are loaded.
 * A Docker environment is available to run this module locally or on a Chameleon GPU node.
 
@@ -18,14 +18,13 @@ Before using this module:
 
 ```
 model_training/
-├── data_loader.py         # Loads multi-crop CSV data
+├── load_data.py           # Loads multi-crop CSV data
 ├── fetch_data.py          # Downloads data from Swift, splits to train/eval/test
 ├── model.py               # LSTM + TCN model class
 ├── train.py               # Trains the model and logs to MLflow
 ├── predict.py             # Runs inference using a model in the registry
 ├── promote_model.py       # Promotes a model version to a stage
 ├── utils.py               # Common training utilities
-├── requirements.txt
 └── Dockerfile             # Environment to be containerized for training
 ```
 
@@ -126,7 +125,7 @@ This returns the yield prediction for the given crop and county-year.
 
 You will deploy a GPU Jupyter container using:
 
-* `model_training/Dockerfile`
+* `model_training/Dockerfile.jupyter`
 * SSH tunnel to expose Jupyter on port 8888
 
 Launch instructions will be added once the Terraform/Ansible pipeline is ready.
