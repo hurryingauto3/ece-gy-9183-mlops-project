@@ -18,14 +18,13 @@ Before using this module:
 
 ```
 model_training/
-├── data_loader.py         # Loads multi-crop CSV data
+├── load_data.py           # Loads multi-crop CSV data
 ├── fetch_data.py          # Downloads data from Swift, splits to train/eval/test
 ├── model.py               # LSTM + TCN model class
 ├── train.py               # Trains the model and logs to MLflow
 ├── predict.py             # Runs inference using a model in the registry
 ├── promote_model.py       # Promotes a model version to a stage
 ├── utils.py               # Common training utilities
-├── requirements.txt
 └── Dockerfile             # Environment to be containerized for training
 ```
 

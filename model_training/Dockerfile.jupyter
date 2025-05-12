@@ -1,0 +1,31 @@
+FROM python:3.10-slim
+
+# Avoid prompts
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl build-essential libffi-dev libssl-dev gfortran \
+    && apt-get install -y wget \
+    && apt-get install -y nodejs npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Poetry
+RUN curl -sSL https://install.python-poetry.org | python3 - --version 2.1.1
+ENV PATH="/root/.local/bin:$PATH"
+
+WORKDIR /app
+
+COPY pyproject.toml poetry.lock* ./
+RUN poetry install --no-interaction --no-ansi --no-root
+
+COPY . .
+
+# Install Jupyter
+RUN poetry run pip install notebook jupyterlab
+
+# Expose Jupyter port
+EXPOSE 8888
+
+CMD ["poetry", "run", "jupyter", "notebook", "--ip=0.0.0.0", "--no-browser", "--allow-root", "--NotebookApp.token=''"]
