@@ -10,6 +10,9 @@ from starlette.concurrency import run_in_threadpool
 from datetime import date # Import date for type hinting
 from typing import Optional
 
+# Prometheus Instrumentation
+from prometheus_fastapi_instrumentator import Instrumentator
+
 from .config import settings
 # Import the data loading function and connection management functions
 from .data_loader import (
@@ -53,6 +56,11 @@ app = FastAPI(
     description="Provides weather features for yield prediction.",
     version="1.0.0"
 )
+
+# --- Add Prometheus Metrics ---
+# Instrument before adding routes or other middleware if it matters for those
+Instrumentator().instrument(app).expose(app)
+# ----------------------------
 
 # --- Startup and Shutdown Events for Swift Connection ---
 @app.on_event("startup")
