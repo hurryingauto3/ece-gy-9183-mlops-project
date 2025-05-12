@@ -194,6 +194,21 @@ services:
       - feature-serving
     # command: -f /mnt/locust/locustfile.py --headless -u 10 -r 2 --run-time 1m # Example headless run
 
+  # jupyter:
+  #   profiles: ["gpu"]
+  #   build:
+  #     context: ./model_training
+  #     dockerfile: Dockerfile.jupyter
+  #   container_name: jupyter-container
+  #   ports:
+  #     - "8888:8888"
+  #   volumes:
+  #     - ./model_training:/app
+  #   env_file:
+  #     - ./model_training/.env.jupyter
+  #   command: >
+  #     poetry run jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+  #   restart: unless-stopped
 # --- ETL Job Service ---
 
   # etl-download:
