@@ -21,6 +21,7 @@ sections:
       ```
 
   - title: What the Pipeline Does
+    
     content: |
       ### Extract Phase
       - Downloads HRRR and USDA datasets using `gdown` from Google Drive.
@@ -41,7 +42,7 @@ sections:
           - `staging.csv`
           - `canary.csv`
 
-  - title: ⚙️ Environment Setup (GPU Node)
+  - title: Environment Setup (GPU Node)
     content: |
       ### 1. SSH into the GPU node
       ```bash
