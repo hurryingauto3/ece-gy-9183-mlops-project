@@ -32,8 +32,12 @@
 | Garwith Luhadia        | Continuous X / DevOps (Unit 3)                       |  [All commits](https://github.com/hurryingauto3/ece-gy-9183-mlops-project/commits/main?since=2025-02-01&until=2025-05-11&author=luhadiagarvit)|
 
 ### System diagram
-
+#### Original System Diagram
 ![System Diagram Placeholder](sys_diag.jpeg)
+
+#### Updated System Diagram
+The system diagram has been updated to reflect the current architecture and components of the AgriYield system. The diagram illustrates the various components, their interactions, and the flow of data within the system
+![System Diagram Placeholder](sys_diag_updated.png)
 
 The diagram illustrates the system architecture deployed on Chameleon Cloud.
 
