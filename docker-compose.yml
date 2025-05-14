@@ -180,7 +180,7 @@ services:
 
   # --- Locust Load Testing Service ---
   locust-service:
-    profiles: ["testing"] # Only run when explicitly requested
+    profiles: ["services"] # Only run when explicitly requested
     build:
       context: ./monitoring
       dockerfile: Dockerfile

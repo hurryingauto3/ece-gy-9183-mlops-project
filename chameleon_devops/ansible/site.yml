@@ -27,6 +27,7 @@
   tasks:
     - name: Deploy GPU Docker Compose stack
       shell: docker compose --profile gpu up -d --remove-orphans
+      # shell: docker compose —profile testing  --profile services up -d --remove-orphan
       args:
         chdir: "{{ project_remote_path }}"
 
@@ -61,7 +62,9 @@
                 - targets: ['localhost:9090']
 
     - name: Deploy Services Docker Compose stack
-      shell: docker compose --profile services up -d --remove-orphans
+      # shell: docker compose --profile services up -d --remove-orphans
+      shell: docker compose --profile services up -d --build --force-recreate --remove-orphans
+      # shell: docker compose —profile testing  --profile services up -d --remove-orphan
       args:
         chdir: "{{ project_remote_path }}"
 
