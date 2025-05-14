@@ -13,9 +13,9 @@
     ]
   },
   "editable": true,
-  "gnetId": null,
+  "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": null,
+  "id": 3,
   "links": [],
   "panels": [
     {
@@ -38,11 +38,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "custom": {
-            "align": "auto",
-            "displayMode": "auto",
-            "inspect": false
-          },
           "mappings": [
             {
               "options": {
@@ -60,8 +55,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
+                "color": "red"
               },
               {
                 "color": "green",
@@ -85,6 +79,7 @@
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -93,9 +88,11 @@
           "values": false
         },
         "showGraph": true,
-        "textMode": "auto"
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
-      "plugin وغيرها": "stat",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": "${prometheus_datasource}",
@@ -115,11 +112,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "lines",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -134,8 +133,7 @@
               "fill": "solid"
             },
             "lineWidth": 1,
-            "pointKind": "circle",
-            "pointRadius": 2,
+            "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
             },
@@ -148,6 +146,19 @@
             "thresholdsStyle": {
               "mode": "off"
             }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
           },
           "unit": "reqps"
         },
@@ -164,15 +175,18 @@
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
-          "sort": "none",
+          "hideZeros": false,
+          "mode": "single",
           "shared": true,
+          "sort": "none",
           "timeStatic": true
         }
       },
-      "plugin وغيرها": "timeseries",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": "${prometheus_datasource}",
@@ -192,11 +206,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "lines",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -211,8 +227,7 @@
               "fill": "solid"
             },
             "lineWidth": 1,
-            "pointKind": "circle",
-            "pointRadius": 2,
+            "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
             },
@@ -225,6 +240,19 @@
             "thresholdsStyle": {
               "mode": "off"
             }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
           },
           "unit": "s"
         },
@@ -241,15 +269,18 @@
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
-          "sort": "none",
+          "hideZeros": false,
+          "mode": "single",
           "shared": true,
+          "sort": "none",
           "timeStatic": true
         }
       },
-      "plugin وغيرها": "timeseries",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": "${prometheus_datasource}",
@@ -288,11 +319,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "lines",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -307,8 +340,7 @@
               "fill": "solid"
             },
             "lineWidth": 1,
-            "pointKind": "circle",
-            "pointRadius": 2,
+            "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
             },
@@ -322,13 +354,26 @@
               "mode": "off"
             }
           },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
           "unit": "reqps"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 12,
         "x": 0,
         "y": 10
       },
@@ -337,26 +382,33 @@
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
-          "sort": "none",
+          "hideZeros": false,
+          "mode": "single",
           "shared": true,
+          "sort": "none",
           "timeStatic": true
         }
       },
-      "plugin وغيرها": "timeseries",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": "${prometheus_datasource}",
-          "expr": "sum by(path, job) (rate(http_requests_total{job=\"feature-service\", path=\"/features\"}[$__rate_interval]))",
+          "editorMode": "code",
+          "expr": "sum by (handler, job) (\n  rate(\n    http_requests_total{\n      job=\"feature-serving\",\n      handler=\"/features\"\n    }[5m]\n  )\n)",
           "legendFormat": "{{path}}",
+          "range": true,
           "refId": "A"
         },
         {
           "datasource": "${prometheus_datasource}",
-          "expr": "sum by(path, job) (rate(http_requests_total{job=\"feature-service\", path=\"/health\"}[$__rate_interval]))",
+          "editorMode": "code",
+          "expr": "sum by (handler, job) (\n  rate(\n    http_requests_total{\n      job=\"feature-serving\",\n      handler=\"/health\"\n    }[5m]\n  )\n)",
           "legendFormat": "{{path}}",
+          "range": true,
           "refId": "B"
         }
       ],
@@ -371,11 +423,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "lines",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -390,8 +444,7 @@
               "fill": "solid"
             },
             "lineWidth": 1,
-            "pointKind": "circle",
-            "pointRadius": 2,
+            "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
             },
@@ -405,14 +458,27 @@
               "mode": "off"
             }
           },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
           "unit": "s"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
+        "w": 12,
+        "x": 12,
         "y": 10
       },
       "id": 5,
@@ -420,26 +486,33 @@
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
-          "sort": "none",
+          "hideZeros": false,
+          "mode": "single",
           "shared": true,
+          "sort": "none",
           "timeStatic": true
         }
       },
-      "plugin وغيرها": "timeseries",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": "${prometheus_datasource}",
-          "expr": "histogram_quantile(0.95, sum by(path, le) (rate(http_request_duration_seconds_bucket{job=\"feature-service\", path=\"/features\"}[$__rate_interval])))",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95,\n  sum by (handler, le) (\n    rate(\n      http_request_duration_seconds_bucket{\n        job=\"feature-serving\",\n        handler=\"/features\"\n      }[5m]\n    )\n  )\n)",
           "legendFormat": "{{path}} P95",
+          "range": true,
           "refId": "A"
         },
         {
           "datasource": "${prometheus_datasource}",
-          "expr": "histogram_quantile(0.99, sum by(path, le) (rate(http_request_duration_seconds_bucket{job=\"feature-service\", path=\"/features\"}[$__rate_interval])))",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99,\n  sum by (handler, le) (\n    rate(\n      http_request_duration_seconds_bucket{\n        job=\"feature-serving\",\n        handler=\"/features\"\n      }[5m]\n    )\n  )\n)",
           "legendFormat": "{{path}} P99",
+          "range": true,
           "refId": "B"
         }
       ],
@@ -447,32 +520,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": "${loki_datasource}",
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 10
-      },
-      "id": 6,
-      "options": {
-        "showLabels": false,
-        "showTime": true,
-        "wrapLogMessage": true
-      },
-      "plugin وغيرها": "logs",
-      "targets": [
-        {
-          "datasource": "${loki_datasource}",
-          "expr": "{container_name=\"feature-service-container\"}",
-          "refId": "A"
-        }
-      ],
-      "title": "Feature Service Logs",
-      "type": "logs"
-    },
-    {
-      "collapsed": false,
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -492,11 +540,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "lines",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -511,8 +561,7 @@
               "fill": "solid"
             },
             "lineWidth": 1,
-            "pointKind": "circle",
-            "pointRadius": 2,
+            "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
             },
@@ -526,13 +575,26 @@
               "mode": "off"
             }
           },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
           "unit": "reqps"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 12,
         "x": 0,
         "y": 19
       },
@@ -541,32 +603,41 @@
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
-          "sort": "none",
+          "hideZeros": false,
+          "mode": "single",
           "shared": true,
+          "sort": "none",
           "timeStatic": true
         }
       },
-      "plugin وغيرها": "timeseries",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": "${prometheus_datasource}",
-          "expr": "sum by(path, job) (rate(http_requests_total{job=\"model-serving\", path=\"/predict\"}[$__rate_interval]))",
+          "editorMode": "code",
+          "expr": "sum by (handler, job) (\n  rate(\n    http_requests_total{\n      job=\"model-serving\",\n      handler=\"/predict\"\n    }[5m]\n  )\n)",
           "legendFormat": "{{path}}",
+          "range": true,
           "refId": "A"
         },
         {
           "datasource": "${prometheus_datasource}",
-          "expr": "sum by(path, job) (rate(http_requests_total{job=\"model-serving\", path=\"/health\"}[$__rate_interval]))",
+          "editorMode": "code",
+          "expr": "sum by (handler, job) (\n  rate(\n    http_requests_total{\n      job=\"model-serving\",\n      handler=\"/health\"\n    }[5m]\n  )\n)",
           "legendFormat": "{{path}}",
+          "range": true,
           "refId": "B"
         },
-         {
+        {
           "datasource": "${prometheus_datasource}",
-          "expr": "sum by(path, job) (rate(http_requests_total{job=\"model-serving\", path=\"/metrics\"}[$__rate_interval]))",
+          "editorMode": "code",
+          "expr": "sum by (handler, job) (\n  rate(\n    http_requests_total{\n      job=\"model-serving\",\n      handler=\"/metrics\"\n    }[5m]\n  )\n)",
           "legendFormat": "{{path}}",
+          "range": true,
           "refId": "C"
         }
       ],
@@ -581,11 +652,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "lines",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -600,8 +673,7 @@
               "fill": "solid"
             },
             "lineWidth": 1,
-            "pointKind": "circle",
-            "pointRadius": 2,
+            "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
             },
@@ -615,14 +687,27 @@
               "mode": "off"
             }
           },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
           "unit": "s"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
+        "w": 12,
+        "x": 12,
         "y": 19
       },
       "id": 9,
@@ -630,56 +715,38 @@
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
-          "sort": "none",
+          "hideZeros": false,
+          "mode": "single",
           "shared": true,
+          "sort": "none",
           "timeStatic": true
         }
       },
-      "plugin وغيرها": "timeseries",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": "${prometheus_datasource}",
-          "expr": "histogram_quantile(0.95, sum by(path, le) (rate(http_request_duration_seconds_bucket{job=\"model-serving\", path=\"/predict\"}[$__rate_interval])))",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by(path, le) (rate(http_request_duration_seconds_bucket{job=\"model-serving\", handler=\"/predict\"}[5m])))",
           "legendFormat": "{{path}} P95",
+          "range": true,
           "refId": "A"
         },
         {
           "datasource": "${prometheus_datasource}",
-          "expr": "histogram_quantile(0.99, sum by(path, le) (rate(http_request_duration_seconds_bucket{job=\"model-serving\", path=\"/predict\"}[$__rate_interval])))",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by(path, le) (rate(http_request_duration_seconds_bucket{job=\"model-serving\", handler=\"/predict\"}[5m])))",
           "legendFormat": "{{path}} P99",
+          "range": true,
           "refId": "B"
         }
       ],
       "title": "Model Serving Request Latency (/predict)",
       "type": "timeseries"
-    },
-     {
-      "datasource": "${loki_datasource}",
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 19
-      },
-      "id": 10,
-      "options": {
-        "showLabels": false,
-        "showTime": true,
-        "wrapLogMessage": true
-      },
-      "plugin وغيرها": "logs",
-      "targets": [
-        {
-          "datasource": "${loki_datasource}",
-          "expr": "{container_name=\"model-serving-container\"}",
-          "refId": "A"
-        }
-      ],
-      "title": "Model Serving Logs",
-      "type": "logs"
     },
     {
       "collapsed": false,
@@ -701,17 +768,12 @@
           "color": {
             "mode": "thresholds"
           },
-          "custom": {
-            "align": "auto",
-            "displayMode": "auto",
-            "inspect": false
-          },
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           }
@@ -720,7 +782,7 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 6,
+        "w": 4,
         "x": 0,
         "y": 28
       },
@@ -730,6 +792,7 @@
         "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "sum"
@@ -738,9 +801,11 @@
           "values": false
         },
         "showGraph": false,
-        "textMode": "value"
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
       },
-      "plugin وغيرها": "stat",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": "${prometheus_datasource}",
@@ -759,17 +824,12 @@
           "color": {
             "mode": "thresholds"
           },
-          "custom": {
-            "align": "auto",
-            "displayMode": "auto",
-            "inspect": false
-          },
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           }
@@ -778,8 +838,8 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 6,
-        "x": 6,
+        "w": 5,
+        "x": 4,
         "y": 28
       },
       "id": 13,
@@ -788,6 +848,7 @@
         "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "sum"
@@ -796,9 +857,11 @@
           "values": false
         },
         "showGraph": false,
-        "textMode": "value"
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
       },
-      "plugin وغيرها": "stat",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": "${prometheus_datasource}",
@@ -810,24 +873,19 @@
       "title": "Total Prediction Requests (from UI)",
       "type": "stat"
     },
-     {
+    {
       "datasource": "${prometheus_datasource}",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
-          "custom": {
-            "align": "auto",
-            "displayMode": "auto",
-            "inspect": false
-          },
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -837,8 +895,8 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 6,
-        "x": 12,
+        "w": 10,
+        "x": 9,
         "y": 28
       },
       "id": 20,
@@ -847,6 +905,7 @@
         "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -855,9 +914,11 @@
           "values": false
         },
         "showGraph": false,
-        "textMode": "value"
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
       },
-      "plugin وغيرها": "stat",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": "${prometheus_datasource}",
@@ -870,31 +931,6 @@
       "type": "stat"
     },
     {
-      "datasource": "${loki_datasource}",
-      "gridPos": {
-        "h": 7,
-        "w": 6,
-        "x": 18,
-        "y": 28
-      },
-      "id": 14,
-      "options": {
-        "showLabels": false,
-        "showTime": true,
-        "wrapLogMessage": true
-      },
-      "plugin وغيرها": "logs",
-      "targets": [
-        {
-          "datasource": "${loki_datasource}",
-          "expr": "{container_name=\"dashboard-container\"}",
-          "refId": "A"
-        }
-      ],
-      "title": "Dashboard Logs",
-      "type": "logs"
-    },
-     {
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -907,17 +943,12 @@
       "title": "MLflow Service (mlflow-container)",
       "type": "row"
     },
-     {
+    {
       "datasource": "${prometheus_datasource}",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
-          },
-          "custom": {
-            "align": "auto",
-            "displayMode": "auto",
-            "inspect": false
           },
           "mappings": [
             {
@@ -936,8 +967,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
+                "color": "red"
               },
               {
                 "color": "green",
@@ -961,6 +991,7 @@
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -969,9 +1000,11 @@
           "values": false
         },
         "showGraph": true,
-        "textMode": "auto"
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
-      "plugin وغيرها": "stat",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": "${prometheus_datasource}",
@@ -983,7 +1016,7 @@
       "title": "MLflow Service Health",
       "type": "stat"
     },
-     {
+    {
       "datasource": "${prometheus_datasource}",
       "fieldConfig": {
         "defaults": {
@@ -991,11 +1024,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "lines",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1010,8 +1045,7 @@
               "fill": "solid"
             },
             "lineWidth": 1,
-            "pointKind": "circle",
-            "pointRadius": 2,
+            "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
             },
@@ -1024,6 +1058,19 @@
             "thresholdsStyle": {
               "mode": "off"
             }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
           },
           "unit": "reqps"
         },
@@ -1040,15 +1087,18 @@
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
-          "sort": "none",
+          "hideZeros": false,
+          "mode": "single",
           "shared": true,
+          "sort": "none",
           "timeStatic": true
         }
       },
-      "plugin وغيرها": "timeseries",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": "${prometheus_datasource}",
@@ -1062,6 +1112,10 @@
     },
     {
       "datasource": "${loki_datasource}",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
       "gridPos": {
         "h": 7,
         "w": 8,
@@ -1070,11 +1124,17 @@
       },
       "id": 24,
       "options": {
+        "dedupStrategy": "none",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
         "showLabels": false,
         "showTime": true,
+        "sortOrder": "Descending",
         "wrapLogMessage": true
       },
-      "plugin وغيرها": "logs",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": "${loki_datasource}",
@@ -1085,7 +1145,7 @@
       "title": "MLflow Logs",
       "type": "logs"
     },
-     {
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -1106,11 +1166,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "lines",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1125,8 +1187,7 @@
               "fill": "solid"
             },
             "lineWidth": 1,
-            "pointKind": "circle",
-            "pointRadius": 2,
+            "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
             },
@@ -1139,6 +1200,19 @@
             "thresholdsStyle": {
               "mode": "off"
             }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
           },
           "unit": "percent"
         },
@@ -1155,15 +1229,18 @@
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
-          "sort": "none",
+          "hideZeros": false,
+          "mode": "single",
           "shared": true,
+          "sort": "none",
           "timeStatic": true
         }
       },
-      "plugin وغيرها": "timeseries",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": "${prometheus_datasource}",
@@ -1183,11 +1260,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "lines",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1202,8 +1281,7 @@
               "fill": "solid"
             },
             "lineWidth": 1,
-            "pointKind": "circle",
-            "pointRadius": 2,
+            "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
             },
@@ -1216,6 +1294,19 @@
             "thresholdsStyle": {
               "mode": "off"
             }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
           },
           "unit": "bytes"
         },
@@ -1232,15 +1323,18 @@
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
-          "sort": "none",
+          "hideZeros": false,
+          "mode": "single",
           "shared": true,
+          "sort": "none",
           "timeStatic": true
         }
       },
-      "plugin وغيرها": "timeseries",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": "${prometheus_datasource}",
@@ -1252,7 +1346,7 @@
       "title": "Memory Usage (Bytes)",
       "type": "timeseries"
     },
-     {
+    {
       "datasource": "${prometheus_datasource}",
       "fieldConfig": {
         "defaults": {
@@ -1260,11 +1354,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "lines",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1279,8 +1375,7 @@
               "fill": "solid"
             },
             "lineWidth": 1,
-            "pointKind": "circle",
-            "pointRadius": 2,
+            "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
             },
@@ -1293,6 +1388,19 @@
             "thresholdsStyle": {
               "mode": "off"
             }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
           },
           "unit": "Bps"
         },
@@ -1309,17 +1417,20 @@
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
-          "sort": "none",
+          "hideZeros": false,
+          "mode": "single",
           "shared": true,
+          "sort": "none",
           "timeStatic": true
         }
       },
-      "plugin وغيرها": "timeseries",
+      "pluginVersion": "11.6.0",
       "targets": [
-         {
+        {
           "datasource": "${prometheus_datasource}",
           "expr": "sum by(container) (rate(container_network_receive_bytes_total{container=~\"$container.*\", id=\"/docker/*\"}[$__rate_interval]))",
           "legendFormat": "{{container}} Received",
@@ -1350,6 +1461,10 @@
     },
     {
       "datasource": "${loki_datasource}",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 24,
@@ -1358,11 +1473,17 @@
       },
       "id": 28,
       "options": {
+        "dedupStrategy": "none",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
         "showLabels": true,
         "showTime": true,
+        "sortOrder": "Descending",
         "wrapLogMessage": true
       },
-      "plugin وغيرها": "logs",
+      "pluginVersion": "11.6.0",
       "targets": [
         {
           "datasource": "${loki_datasource}",
@@ -1374,8 +1495,9 @@
       "type": "logs"
     }
   ],
-  "schemaVersion": 36,
-  "style": "dark",
+  "preload": false,
+  "refresh": "",
+  "schemaVersion": 41,
   "tags": [
     "agriyield",
     "mlops",
@@ -1385,14 +1507,11 @@
     "list": [
       {
         "current": {
-          "selected": true,
           "text": "Prometheus",
-          "value": "Prometheus"
+          "value": "PBFA97CFB590B2093"
         },
-        "hide": 0,
         "includeAll": false,
         "label": "Prometheus Datasource",
-        "multi": false,
         "name": "prometheus_datasource",
         "options": [],
         "query": "prometheus",
@@ -1400,16 +1519,13 @@
         "regex": "",
         "type": "datasource"
       },
-       {
+      {
         "current": {
-          "selected": true,
-          "text": "Loki",
-          "value": "Loki"
+          "text": "",
+          "value": ""
         },
-        "hide": 0,
         "includeAll": false,
         "label": "Loki Datasource",
-        "multi": false,
         "name": "loki_datasource",
         "options": [],
         "query": "loki",
@@ -1419,11 +1535,9 @@
       },
       {
         "current": {
-          "selected": false,
           "text": "All",
           "value": "$__all"
         },
-        "hide": 0,
         "includeAll": true,
         "label": "Container",
         "multi": true,
@@ -1438,7 +1552,7 @@
     ]
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {},

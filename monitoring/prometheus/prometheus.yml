@@ -1,12 +1,24 @@
 scrape_configs:
   - job_name: 'model-serving'
+    metrics_path: /metrics
+    scrape_interval: 15s
     static_configs:
       - targets: ['model-serving:8000']
+        labels:
+          name: "model-serving"
 
   - job_name: 'feature-serving'
+    metrics_path: /metrics
+    scrape_interval: 15s
     static_configs:
       - targets: ['feature-service:8001']
+        labels:
+          name: "feature-service"
 
   - job_name: 'dashboard'
+    metrics_path: /metrics
+    scrape_interval: 15s
     static_configs:
       - targets: ['dashboard:9095']
+        labels:
+          name: "dashboard"
