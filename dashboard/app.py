@@ -1,111 +1,137 @@
 import streamlit as st
 import pandas as pd
-# import numpy as np # No longer explicitly needed for placeholders in this version
-import plotly.express as px # Keep for potential other plots
-from datetime import datetime, date # date is used for date_input
+import plotly.express as px
+from datetime import datetime, date
 
 # Import new and existing services/processors
-from api_service import fetch_single_crop_histogram_prediction #, fetch_historical_data # Keep historical if needed later
-from data_processor import process_histogram_prediction #, process_historical_data, combine_historical_and_prediction
+from api_service import fetch_single_crop_histogram_prediction
+from data_processor import process_histogram_prediction
 
 # Prometheus client
-from prometheus_client import Counter, Gauge, start_http_server
-import threading # To run Prometheus server in a separate thread
-import atexit # To handle cleanup if needed, though less critical for read-only metrics server
+# Import REGISTRY to access the default registry
+from prometheus_client import Counter, Gauge, start_http_server, REGISTRY, CollectorRegistry
+import threading
+import atexit
 
 # --- Prometheus Metrics Setup ---
-# Ensure this block runs only once
+
 PROMETHEUS_PORT = 9095 # Internal port for Prometheus scraping within Docker network
-_prometheus_server_started = False
-_prometheus_thread = None
 
-# Define metrics
-PAGE_VIEWS = Counter('dashboard_page_views', 'Dashboard page view count')
-PREDICTION_REQUESTS = Counter('dashboard_prediction_requests_total', 'Total prediction requests made from dashboard')
-ACTIVE_SESSIONS = Gauge('dashboard_active_sessions', 'Number of active dashboard user sessions') # Simplified
-LAST_PREDICTION_TIME = Gauge('dashboard_last_prediction_timestamp_seconds', 'Timestamp of the last prediction request')
+def initialize_metrics_and_server():
+    # Use a session state variable as a flag
+    if 'prometheus_setup_complete' not in st.session_state:
+        print("INFO: Performing Prometheus metrics and server setup...")
 
-def start_metrics_server():
-    global _prometheus_server_started, _prometheus_thread
-    if not _prometheus_server_started:
         try:
-            start_http_server(PROMETHEUS_PORT)
-            _prometheus_server_started = True
-            st.session_state['_prometheus_server_started'] = True # Use session state to persist across reruns
-            print(f"INFO: Prometheus metrics server started on port {PROMETHEUS_PORT}")
-        except Exception as e:
-            print(f"ERROR: Failed to start Prometheus metrics server on port {PROMETHEUS_PORT}: {e}")
+            # Attempt to get existing metrics
+            # If they don't exist, we'll hit a KeyError or similar, and then create them.
+            page_views = REGISTRY._names_to_collectors['dashboard_page_views']
+            prediction_requests = REGISTRY._names_to_collectors['dashboard_prediction_requests_total']
+            active_sessions = REGISTRY._names_to_collectors['dashboard_active_sessions']
+            last_prediction_time = REGISTRY._names_to_collectors['dashboard_last_prediction_timestamp_seconds']
+            print("INFO: Prometheus metrics found in registry.")
 
-# Attempt to start the server if not already started in this session
-if '_prometheus_server_started' not in st.session_state:
-    # For multipage apps or more complex scenarios, managing the thread might be needed.
-    # For a single page app, starting it once should be okay.
-    # A more robust way for multipage apps is to manage a single thread across sessions.
-    _prometheus_thread = threading.Thread(target=start_metrics_server, daemon=True)
-    _prometheus_thread.start()
+        except (KeyError, AttributeError):
+            # Metrics don't exist in the registry yet, create them
+            print("INFO: Creating Prometheus metrics and registering with default registry.")
+            page_views = Counter('dashboard_page_views', 'Dashboard page view count')
+            prediction_requests = Counter('dashboard_prediction_requests_total', 'Total prediction requests made from dashboard')
+            active_sessions = Gauge('dashboard_active_sessions', 'Number of active dashboard user sessions')
+            last_prediction_time = Gauge('dashboard_last_prediction_timestamp_seconds', 'Timestamp of the last prediction request')
 
-# Increment page view counter (this will run on every script run / interaction)
+        # Store the metric objects in session state so they are accessible on subsequent reruns
+        st.session_state.metrics = {
+            'PAGE_VIEWS': page_views,
+            'PREDICTION_REQUESTS': prediction_requests,
+            'ACTIVE_SESSIONS': active_sessions,
+            'LAST_PREDICTION_TIME': last_prediction_time,
+        }
+
+        # --- Start Prometheus HTTP Server (This part must run ONCE per process) ---
+        # Use a global flag managed across all Streamlit reruns for the server
+        # Streamlit's threading might still cause "Address already in use" if not careful.
+        if 'prometheus_server_thread' not in st.session_state:
+             try:
+                 # Using threading.Thread ensures it doesn't block Streamlit
+                 thread = threading.Thread(target=lambda: start_http_server(PROMETHEUS_PORT), daemon=True)
+                 thread.start()
+                 st.session_state.prometheus_server_thread = thread # Store the thread object
+                 print(f"INFO: Prometheus metrics server starting in background thread on port {PROMETHEUS_PORT}")
+             except Exception as e:
+                 print(f"ERROR: Failed to start Prometheus metrics server thread: {e}")
+        else:
+             if not st.session_state.prometheus_server_thread.is_alive():
+                  print("WARNING: Prometheus server thread died. Consider restarting the app.")
+                  
+        # Mark setup as complete for this session
+        st.session_state.prometheus_setup_complete = True
+        print("INFO: Prometheus setup marked as complete for this session.")
+    else:
+        print("INFO: Prometheus setup already complete for this session.")
+        # Metrics should be accessible via st.session_state.metrics or REGISTRY._names_to_collectors
+
+# Call the initialization function on every rerun
+initialize_metrics_and_server()
+
+
+PAGE_VIEWS = st.session_state.metrics['PAGE_VIEWS']
+PREDICTION_REQUESTS = st.session_state.metrics['PREDICTION_REQUESTS']
+ACTIVE_SESSIONS = st.session_state.metrics['ACTIVE_SESSIONS']
+LAST_PREDICTION_TIME = st.session_state.metrics['LAST_PREDICTION_TIME']
+
+
+# --- Application Logic ---
+
+# Increment page view counter using the retrieved metric object
 PAGE_VIEWS.inc()
-# For active sessions, Streamlit doesn't have a direct hook for session end without more complex management.
-# This gauge would ideally be managed by a more sophisticated session tracking mechanism if needed.
-# For simplicity, we might increment on new session and decrement if we could detect session close.
-# A simpler proxy: set to number of current unique session IDs (if accessible and meaningful).
 
-# Page configuration
+
+# Page configuration (keep this part)
 st.set_page_config(
     page_title="Crop Yield Histogram Prediction Dashboard",
     page_icon="🌾",
     layout="wide"
 )
 
-# Set title and description
+# Set title and description (keep this part)
 st.title("🌾 Crop Yield Histogram Prediction")
 st.markdown("""
     Select a FIPS county code, cut-off date, and crop type to visualize the predicted yield histogram.
 """)
 
-# Sidebar for input controls
+# Sidebar for input controls (keep this part)
 st.sidebar.header("Prediction Inputs")
 
-# FIPS County Code input
-# In a real app, this could be validated, fetched from a list, or a map selector.
+# FIPS County Code input (keep this part)
 county_fips_input = st.sidebar.text_input(
     "FIPS County Code",
-    value="DUMMY"  # Default to DUMMY FIPS for easy testing
+    value="DUMMY"
 )
 
-# Cut-off Date input
+# Cut-off Date input (keep this part)
 cut_off_date_input = st.sidebar.date_input(
     "Cut-off Date",
-    value=date(datetime.now().year, 7, 15) # Default to July 15 of current year
+    value=date(datetime.now().year, 7, 15)
 )
 
-# Crop Type selection
-# Common crops, could be expanded or made dynamic
+# Crop Type selection (keep this part)
 crop_options = ["corn", "soybeans", "wheat", "rice", "cotton", "barley"]
 selected_crop = st.sidebar.selectbox(
     "Select Crop Type",
     crop_options,
-    index=0  # Default to the first crop (corn)
+    index=0
 )
 
-# Histogram Bins (fixed for now, could be made a user input later)
-# This should match the bins your model is trained for or expects.
-# For the dummy model, which outputs 5 probabilities, we need 6 bin edges.
-# fixed_histogram_bins = [0, 50, 100, 150, 200, 250] # 6 edges = 5 bins
-# Example for corn: [0, 50, 100, 120, 140, 160, 180, 200, 220, 240, 260, 300, 350]
-
-# st.sidebar.markdown("---_Note: Histogram bins are currently fixed for 5-bin output._---")
-
+# Histogram Bins (keep this part)
 histogram_bins_str = st.sidebar.text_input(
     "Histogram Bin Edges (comma-separated)",
-    value="0, 50, 100, 150, 200, 250", # Default for 5 bins
+    value="0, 50, 100, 150, 200, 250",
     help="Enter comma-separated numbers for bin edges, e.g., 0,20,40,60,80,100. Must be at least 2 edges, strictly increasing."
 )
 st.sidebar.markdown("---_Note: The number of bins implied (edges - 1) must match the model's output._---")
 
 
-# --- Main app layout ---
+# --- Main app layout --- (keep this part)
 if st.sidebar.button("Get Prediction"):
     user_histogram_bins = []
     valid_bins = False
@@ -130,7 +156,8 @@ if st.sidebar.button("Get Prediction"):
             st.error(f"Error processing histogram bins: {e}")
 
     if valid_bins: # Proceed only if all inputs including bins are valid
-        PREDICTION_REQUESTS.inc() # Increment counter for prediction requests
+        # Use the metric objects retrieved from session state
+        PREDICTION_REQUESTS.inc()
         LAST_PREDICTION_TIME.set_to_current_time()
         with st.spinner(f"Fetching prediction for {selected_crop} in {county_fips_input} for date {cut_off_date_input}..."):
             try:
@@ -141,7 +168,7 @@ if st.sidebar.button("Get Prediction"):
                     crop_name=selected_crop,
                     histogram_bins=user_histogram_bins # Use parsed user input
                 )
-                
+
                 if api_response and api_response.get("predicted_histogram"):
                     st.subheader(f"Predicted Yield Histogram for {selected_crop.capitalize()}")
                     st.markdown(f"**County FIPS:** `{api_response.get('county', county_fips_input)}` | "
@@ -149,11 +176,11 @@ if st.sidebar.button("Get Prediction"):
                                 f"**Year:** `{api_response.get('year', cut_off_date_input.year)}`")
 
                     histogram_df = process_histogram_prediction(api_response)
-                    
+
                     if not histogram_df.empty:
                         # Display bar chart
                         st.bar_chart(histogram_df, x='Bin Range', y='Probability', height=500)
-                        
+
                         # Display raw data in an expander (optional)
                         with st.expander("View Raw API Response"):
                             st.json(api_response)
@@ -163,7 +190,7 @@ if st.sidebar.button("Get Prediction"):
                         st.warning("Could not process histogram data from the API response. Ensure the response format is correct.")
                         with st.expander("View Raw API Response"):
                             st.json(api_response)
-                
+
                 elif api_response and api_response.get("error"):
                     st.error(f"API Error: {api_response.get('error')}")
                     with st.expander("View Full API Error Response"):
@@ -178,16 +205,16 @@ if st.sidebar.button("Get Prediction"):
                 # Consider adding more specific error messages based on exception type
 else:
     st.info("Select prediction inputs in the sidebar and click 'Get Prediction'.")
-    # Optional: Show a placeholder image or example chart
+    # Optional: Show a placeholder image or example chart (keep this part)
     st.markdown("### Example Histogram Output")
     example_bins = [f"{i}-{i+20}" for i in range(0, 100, 20)]
     example_probs = [0.1, 0.25, 0.3, 0.25, 0.1]
-    if len(example_bins) > len(example_probs): # Quick fix if lengths mismatch for placeholder
+    if len(example_bins) > len(example_probs):
         example_bins = example_bins[:len(example_probs)]
     elif len(example_probs) > len(example_bins):
         example_probs = example_probs[:len(example_bins)]
 
-    if example_bins and example_probs: # Ensure lists are not empty
+    if example_bins and example_probs:
         example_df = pd.DataFrame({
             'Bin Range': example_bins,
             'Probability': example_probs
@@ -197,5 +224,5 @@ else:
         st.markdown("_Placeholder chart could not be generated._")
 
 
-# --- (Optional) Footer or additional information ---
+# --- (Optional) Footer or additional information --- (keep this part)
 st.markdown("---_Dashboard interacting with the AgriYield Prediction Service._---")
