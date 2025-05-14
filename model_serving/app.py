@@ -18,7 +18,7 @@ from datetime import date # Import date
 
 # Import modules needed by the app
 # Note: Ensure 'torch' is implicitly handled by predict.py or dependencies
-from model_serving.predict import predict_yield, predict_yield_batch, async_client
+from model_serving.predict import predict_yield, async_client
 # Consolidate imports from mlflow_loader
 from model_serving.mlflow_loader import (
     get_model_and_mapping, # This is the async dependency function
