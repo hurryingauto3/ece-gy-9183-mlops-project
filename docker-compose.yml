@@ -193,7 +193,7 @@ services:
     # Docker Compose typically handles this by default by creating a default network.
     depends_on:
       - model-serving
-      - feature-serving
+      - feature-service
     # command: -f /mnt/locust/locustfile.py --headless -u 10 -r 2 --run-time 1m # Example headless run
 
   # jupyter:
