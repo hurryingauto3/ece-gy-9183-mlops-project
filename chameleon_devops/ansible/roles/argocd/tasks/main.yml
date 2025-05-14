@@ -117,9 +117,9 @@
     release_name: argo-cd
     namespace: argocd
     create_namespace: false
-    wait: true           # ← Helm blocks until all resources are ready
-    timeout: 600         #   (10 min, adjust as desired)
-    kubeconfig: /etc/rancher/k3s/k3s.yaml
+    wait: false           # ← Helm blocks until all resources are ready
+    # timeout: 600         #   (10 min, adjust as desired)
+    # kubeconfig: /etc/rancher/k3s/k3s.yaml
 
 
 # - name: Wait for argocd-server rollout to complete

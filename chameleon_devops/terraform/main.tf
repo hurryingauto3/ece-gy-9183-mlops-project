@@ -11,7 +11,7 @@ locals {
     "5000", "3000", "9090",
     "9000", "9001", "8000",
     "8265", "10001", "8501",
-    "80", "443"
+    "80", "443", "8089",
   ]
 
   # path to your private SSH key (drops the ".pub")
@@ -27,11 +27,13 @@ data "openstack_networking_network_v2" "external_kvm" {
 }
 
 data "openstack_networking_network_v2" "external_uc" {
+  count    = local.use_chi_uc ? 1 : 0
   provider = openstack.uc
   name     = var.ext_net_name_uc
 }
 
 data "openstack_networking_network_v2" "external_chi" {
+  count    = local.use_chi_tacc ? 1 : 0
   provider = openstack.chi
   name     = var.ext_net_name_tacc
 }
@@ -162,7 +164,7 @@ resource "openstack_compute_instance_v2" "services_node" {
   image_name      = var.services_image
   flavor_name     = var.services_flavor
   key_pair        = openstack_compute_keypair_v2.keypair_kvm.name
-  security_groups = [openstack_networking_secgroup_v2.mlops_secgrp.name]
+  security_groups = [openstack_networking_secgroup_v2.mlops_secgrp_proj4.name]
 
   network {
     uuid = openstack_networking_network_v2.private_net_kvm.id
@@ -174,6 +176,7 @@ resource "openstack_compute_instance_v2" "services_node" {
 #    (use existing network to avoid stale-ID errors)
 # ──────────────────────────────────────────
 resource "openstack_networking_network_v2" "private_net_chi" {
+  count = local.use_chi_tacc ? 1 : 0
   provider              = openstack.chi
   name                  = "${var.network_name}-chi"
   admin_state_up        = true
@@ -181,9 +184,10 @@ resource "openstack_networking_network_v2" "private_net_chi" {
 }
 
 resource "openstack_networking_subnet_v2" "private_subnet_chi" {
+  count = local.use_chi_tacc ? 1 : 0
   provider   = openstack.chi
   name       = "${var.network_name}-chi-subnet"
-  network_id = openstack_networking_network_v2.private_net_chi.id
+  network_id = openstack_networking_network_v2.private_net_chi[count.index].id
   cidr       = var.network_cidr
   ip_version = 4
   gateway_ip = var.network_gateway
@@ -195,23 +199,26 @@ resource "openstack_networking_subnet_v2" "private_subnet_chi" {
 }
 
 resource "openstack_networking_router_v2" "router_chi" {
+  count = local.use_chi_tacc ? 1 : 0
   provider            = openstack.chi
   name                = "${var.network_name}-router-chi"
   admin_state_up      = true
-  external_network_id = data.openstack_networking_network_v2.external_chi.id
+  external_network_id = data.openstack_networking_network_v2.external_chi[0].id
 }
 
 resource "openstack_networking_router_interface_v2" "router_intf_chi" {
+  count = local.use_chi_tacc ? 1 : 0
   provider  = openstack.chi
-  router_id = openstack_networking_router_v2.router_chi.id
+  router_id = openstack_networking_router_v2.router_chi[count.index].id
   # subnet_id = data.openstack_networking_subnet_v2.private_subnet_chi.id
-  subnet_id = openstack_networking_subnet_v2.private_subnet_chi.id
+  subnet_id = openstack_networking_subnet_v2.private_subnet_chi[count.index].id
 }
 
 # ──────────────────────────────────────────
 # 7) Private net on CHI@UC (GPU fallback)
 # ──────────────────────────────────────────
 resource "openstack_networking_network_v2" "private_net_uc" {
+  count = local.use_chi_uc ? 1 : 0
   provider              = openstack.uc
   name                  = "${var.network_name}-uc"
   admin_state_up        = true
@@ -219,9 +226,10 @@ resource "openstack_networking_network_v2" "private_net_uc" {
 }
 
 resource "openstack_networking_subnet_v2" "private_subnet_uc" {
+  count = local.use_chi_uc ? 1 : 0
   provider   = openstack.uc
   name       = "${var.network_name}-uc-subnet"
-  network_id = openstack_networking_network_v2.private_net_uc.id
+  network_id = openstack_networking_network_v2.private_net_uc[count.index].id
   cidr       = var.network_cidr
   ip_version = 4
   gateway_ip = var.network_gateway
@@ -233,16 +241,18 @@ resource "openstack_networking_subnet_v2" "private_subnet_uc" {
 }
 
 resource "openstack_networking_router_v2" "router_uc" {
+  count = local.use_chi_uc ? 1 : 0
   provider            = openstack.uc
   name                = "${var.network_name}-router-uc"
   admin_state_up      = true
-  external_network_id = data.openstack_networking_network_v2.external_uc.id
+  external_network_id = data.openstack_networking_network_v2.external_uc[0].id
 }
 
 resource "openstack_networking_router_interface_v2" "router_intf_uc" {
+  count = local.use_chi_uc ? 1 : 0
   provider  = openstack.uc
-  router_id = openstack_networking_router_v2.router_uc.id
-  subnet_id = openstack_networking_subnet_v2.private_subnet_uc.id
+  router_id = openstack_networking_router_v2.router_uc[count.index].id
+  subnet_id = openstack_networking_subnet_v2.private_subnet_uc[count.index].id
 }
 
 # ──────────────────────────────────────────
@@ -267,7 +277,7 @@ resource "openstack_compute_instance_v2" "gpu_node_chi_tacc" {
 
   network {
     # uuid = data.openstack_networking_network_v2.private_net_chi.id
-    uuid = openstack_networking_network_v2.private_net_chi.id
+    uuid = openstack_networking_network_v2.private_net_chi[count.index].id
   }
 
   scheduler_hints {
@@ -298,7 +308,7 @@ resource "openstack_compute_instance_v2" "gpu_node_chi_uc" {
   }
 
   network {
-    uuid = openstack_networking_network_v2.private_net_uc.id
+    uuid = openstack_networking_network_v2.private_net_uc[count.index].id
   }
 
   scheduler_hints {
@@ -341,7 +351,7 @@ resource "openstack_compute_floatingip_associate_v2" "assoc_services" {
 resource "openstack_networking_floatingip_v2" "fip_gpu_chi_tacc" {
   count    = local.use_chi_tacc ? 1 : 0
   provider = openstack.chi
-  pool     = data.openstack_networking_network_v2.external_chi.name
+  pool     = data.openstack_networking_network_v2.external_chi[count.index].name
 }
 
 resource "openstack_compute_floatingip_associate_v2" "assoc_gpu_chi_tacc" {
@@ -354,7 +364,7 @@ resource "openstack_compute_floatingip_associate_v2" "assoc_gpu_chi_tacc" {
 resource "openstack_networking_floatingip_v2" "fip_gpu_chi_uc" {
   count    = local.use_chi_uc ? 1 : 0
   provider = openstack.uc
-  pool     = data.openstack_networking_network_v2.external_uc.name
+  pool     = data.openstack_networking_network_v2.external_uc[count.index].name
 }
 
 resource "openstack_compute_floatingip_associate_v2" "assoc_gpu_chi_uc" {

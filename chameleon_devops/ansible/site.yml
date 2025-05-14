@@ -313,156 +313,158 @@
 #     - monitoring
 #     - argo_workflows
 
-#########################################################
+##################################################################################################################
 
 # =========================
 # Shared base setup for all nodes
 # =========================
-- name: Base provisioning on all nodes
-  hosts: all
-  become: true
-  vars:
-    project_remote_path: "/home/{{ ansible_user }}/mlops-project"
-  roles:
-    - docker_install
-    - docker_compose
-    - copy_configs
-    - project
+# - name: Base provisioning on all nodes
+#   hosts: all
+#   become: true
+#   vars:
+#     project_remote_path: "/home/{{ ansible_user }}/mlops-project"
+#   roles:
+#     - docker_install
+#     - docker_compose
+#     - copy_configs
+#     - project
 
-# =========================
-# GPU-specific setup
-# =========================
-- name: GPU node setup
-  hosts: gpu_nodes
-  become: true
-  vars:
-    project_remote_path: "/home/{{ ansible_user }}/mlops-project"
-  vars_files:
-    - group_vars/all/secrets.yml
-  roles:
-    - gpu_setup
-  tasks:
-    - name: Deploy GPU Docker Compose stack
-      shell: docker compose --profile gpu up -d --remove-orphans
-      args:
-        chdir: "{{ project_remote_path }}"
+# # # =========================
+# # # GPU-specific setup
+# # # =========================
+# - name: GPU node setup
+#   hosts: gpu_nodes
+#   become: true
+#   vars:
+#     project_remote_path: "/home/{{ ansible_user }}/mlops-project"
+#   vars_files:
+#     - group_vars/all/secrets.yml
+#   roles:
+#     - gpu_setup
+#   tasks:
+#     - name: Deploy GPU Docker Compose stack
+#       shell: docker compose --profile gpu up -d --remove-orphans
+#       args:
+#         chdir: "{{ project_remote_path }}"
 
-# =========================
-# Services node setup (Prometheus + K8s Control Plane)
-# =========================
-- name: Services node setup
-  hosts: services_nodes
-  become: true
-  vars:
-    project_remote_path: "/home/{{ ansible_user }}/mlops-project"
-  tasks:
-    - name: Ensure Prometheus config directory exists
-      file:
-        path: "{{ project_remote_path }}/devops/docker-compose"
-        state: directory
-        mode: '0755'
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
+# # # =========================
+# # # Services node setup (Prometheus + K8s Control Plane)
+# # # =========================
+# - name: Services node setup
+#   hosts: services_nodes
+#   become: true
+#   vars_files:
+#     - group_vars/all/secrets.yml
+#   vars:
+#     project_remote_path: "/home/{{ ansible_user }}/mlops-project"
+#   tasks:
+#     - name: Ensure Prometheus config directory exists
+#       file:
+#         path: "{{ project_remote_path }}/devops/docker-compose"
+#         state: directory
+#         mode: '0755'
+#         owner: "{{ ansible_user }}"
+#         group: "{{ ansible_user }}"
 
-    - name: Ensure Prometheus configuration file exists
-      copy:
-        dest: "{{ project_remote_path }}/devops/docker-compose/prometheus.yml"
-        content: |
-          global:
-            scrape_interval: 15s
-          scrape_configs:
-            - job_name: 'prometheus'
-              static_configs:
-                - targets: ['localhost:9090']
+#     - name: Ensure Prometheus configuration file exists
+#       copy:
+#         dest: "{{ project_remote_path }}/devops/docker-compose/prometheus.yml"
+#         content: |
+#           global:
+#             scrape_interval: 15s
+#           scrape_configs:
+#             - job_name: 'prometheus'
+#               static_configs:
+#                 - targets: ['localhost:9090']
 
-    - name: Deploy Services Docker Compose stack
-      shell: docker compose --profile services up -d --remove-orphans
-      args:
-        chdir: "{{ project_remote_path }}"
+#     - name: Deploy Services Docker Compose stack
+#       shell: docker compose --profile services up -d --remove-orphans
+#       args:
+#         chdir: "{{ project_remote_path }}"
 
-# # =========================
-# # Persistent Storage: Format + Mount + Docker migration
-# =========================
-- name: Setup and migrate Docker to persistent storage
-  hosts: services_nodes,gpu_nodes
-  become: true
-  tasks:
-    - name: Check if /dev/vdb exists
-      stat:
-        path: /dev/vdb
-      register: vdb_stat
+# # # # =========================
+# # # # Persistent Storage: Format + Mount + Docker migration
+# # # =========================
+# - name: Setup and migrate Docker to persistent storage
+#   hosts: services_nodes,gpu_nodes
+#   become: true
+#   tasks:
+#     - name: Check if /dev/vdb exists
+#       stat:
+#         path: /dev/vdb
+#       register: vdb_stat
 
-    - name: Format /dev/vdb if it exists
-      filesystem:
-        fstype: ext4
-        dev: /dev/vdb
-      when: vdb_stat.stat.exists
+#     - name: Format /dev/vdb if it exists
+#       filesystem:
+#         fstype: ext4
+#         dev: /dev/vdb
+#       when: vdb_stat.stat.exists
 
-    - name: Create mount point
-      file:
-        path: /mnt/persistent
-        state: directory
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
-        mode: "0775"
-      when: vdb_stat.stat.exists
+#     - name: Create mount point
+#       file:
+#         path: /mnt/persistent
+#         state: directory
+#         owner: "{{ ansible_user }}"
+#         group: "{{ ansible_user }}"
+#         mode: "0775"
+#       when: vdb_stat.stat.exists
 
-    - name: Mount /dev/vdb on /mnt/persistent
-      mount:
-        path: /mnt/persistent
-        src: /dev/vdb
-        fstype: ext4
-        state: mounted
-        opts: defaults,nofail
-      when: vdb_stat.stat.exists
+#     - name: Mount /dev/vdb on /mnt/persistent
+#       mount:
+#         path: /mnt/persistent
+#         src: /dev/vdb
+#         fstype: ext4
+#         state: mounted
+#         opts: defaults,nofail
+#       when: vdb_stat.stat.exists
 
-    - name: Ensure Docker service is started
-      systemd:
-        name: docker
-        state: started
-        enabled: true
+#     - name: Ensure Docker service is started
+#       systemd:
+#         name: docker
+#         state: started
+#         enabled: true
 
-    - name: Check if /var/lib/docker exists
-      stat:
-        path: /var/lib/docker
-      register: docker_data_stat
+#     - name: Check if /var/lib/docker exists
+#       stat:
+#         path: /var/lib/docker
+#       register: docker_data_stat
 
-    - name: Create Docker dir on persistent if missing
-      file:
-        path: /mnt/persistent/docker
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
-      when: vdb_stat.stat.exists
+#     - name: Create Docker dir on persistent if missing
+#       file:
+#         path: /mnt/persistent/docker
+#         state: directory
+#         owner: root
+#         group: root
+#         mode: "0755"
+#       when: vdb_stat.stat.exists
 
-    - name: Rsync Docker data if it exists
-      command: rsync -aP /var/lib/docker/ /mnt/persistent/docker/
-      when:
-        - vdb_stat.stat.exists
-        - docker_data_stat.stat.exists
+#     - name: Rsync Docker data if it exists
+#       command: rsync -aP /var/lib/docker/ /mnt/persistent/docker/
+#       when:
+#         - vdb_stat.stat.exists
+#         - docker_data_stat.stat.exists
 
-    - name: Backup old Docker dir
-      command: mv /var/lib/docker /var/lib/docker.backup
-      when:
-        - vdb_stat.stat.exists
-        - docker_data_stat.stat.exists
+#     - name: Backup old Docker dir
+#       command: mv /var/lib/docker /var/lib/docker.backup
+#       when:
+#         - vdb_stat.stat.exists
+#         - docker_data_stat.stat.exists
 
-    - name: Configure Docker daemon to use persistent storage
-      copy:
-        dest: /etc/docker/daemon.json
-        content: |
-          {
-            "data-root": "/mnt/persistent/docker"
-          }
-      when: vdb_stat.stat.exists
+#     - name: Configure Docker daemon to use persistent storage
+#       copy:
+#         dest: /etc/docker/daemon.json
+#         content: |
+#           {
+#             "data-root": "/mnt/persistent/docker"
+#           }
+#       when: vdb_stat.stat.exists
 
-    - name: Restart Docker with persistent config
-      systemd:
-        name: docker
-        state: restarted
-        enabled: true
-      when: vdb_stat.stat.exists
+#     - name: Restart Docker with persistent config
+#       systemd:
+#         name: docker
+#         state: restarted
+#         enabled: true
+#       when: vdb_stat.stat.exists
 
 # =========================
 # Kubernetes Control Plane (on same shared services node)
@@ -521,19 +523,61 @@
   become: true
 
   # EVERY task and role will pick up this kubeconfig:
-  environment:
-    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  # environment:
+  #   KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
   vars_files:
     - group_vars/all/secrets.yml
 
-  tasks:
-    - name: Ensure k3s is installed and running
-      import_role:
-        name: k3s
+  pre_tasks:
+    - name: Ensure python3‑pip & python3‑kubernetes are installed
+      apt:
+        name:
+          - python3-pip
+          - python3-kubernetes
+        state: present
+      when: ansible_os_family == 'Debian'
 
   roles:
-    - role: argocd            # installs Argo CD into namespace `argocd`
+    - role: k3s    # << this drops /etc/rancher/k3s/k3s.yaml onto the host
+# ────────────────────────────────────────────────────────────────────────────────
+
+- name: Deploy ArgoCD, Workflows & Monitoring
+  hosts: k8s_control_plane
+  become: true
+
+  # tell every k8s‑module exactly which file to load
+  environment:
+    K8S_AUTH_KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+  pre_tasks:
+    - name: Ensure apt cache is up to date
+      apt:
+        update_cache: yes
+
+    - name: Install prerequisites for Helm
+      apt:
+        name:
+          - curl
+          - tar
+        state: present
+
+    - name: Install Helm (official install script)
+      shell: |
+        curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+      args:
+        creates: /usr/local/bin/helm
+
+    - name: Verify Helm is in PATH
+      command: helm version --client
+      register: helm_out
+
+    - name: Debug Helm version
+      debug:
+        var: helm_out.stdout
+
+  roles:
+    - role: argocd
     - role: argocd_image_updater
-    - role: workflows        # applies Argo Workflows CRDs + controller
-    - role: monitoring       # Prometheus & Grafana
+    - role: workflows
+    - role: monitoring
