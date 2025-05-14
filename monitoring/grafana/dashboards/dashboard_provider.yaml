@@ -1,0 +1,19 @@
+# file: ./monitoring/grafana/provisioning/dashboards/dashboard_provider.yaml
+apiVersion: 1
+
+providers:
+  # A provider for our AgriYield dashboards
+  - name: 'AgriYield Dashboards' # A unique name for your provider
+    orgId: 1 # The organization ID (1 is the default)
+    folder: 'AgriYield Services' # The folder name in Grafana UI where dashboards will be placed
+    type: file # This provider loads dashboards from files
+    disableDeletion: true # Prevent users from deleting these dashboards from the UI
+    editable: false # Prevent users from editing these dashboards from the UI (edits would be lost on restart anyway)
+    allowUiUpdates: false # Ensure updates are only done via provisioning
+    options:
+      # The path here is the path *inside the Grafana container*
+      # This should be the directory where your dashboard JSON files are located
+      # Based on your docker-compose.yml volume mapping, this is /etc/grafana/provisioning/dashboards
+      path: /etc/grafana/provisioning/dashboards
+      # folderUID: '' # Optional: Specify a specific UID for the folder if needed
+      # updateInterval: '1m' # Optional: Scan the path for updates periodically (e.g., every minute) - restart is simpler

@@ -1,6 +1,3 @@
-global:
-  scrape_interval: 15s
-
 scrape_configs:
   - job_name: 'model-serving'
     static_configs:
@@ -8,8 +5,8 @@ scrape_configs:
 
   - job_name: 'feature-serving'
     static_configs:
-      - targets: ['feature-serving:8001']
+      - targets: ['feature-service:8001']
 
   - job_name: 'dashboard'
     static_configs:
-      - targets: ['dashboard:9095'] 
+      - targets: ['dashboard:9095']
