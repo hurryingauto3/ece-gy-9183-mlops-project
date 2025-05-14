@@ -66,6 +66,8 @@ services:
         protocol: tcp
         mode: ingress
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       # Pass standard OpenStack OS_* variables required by openstack.connect()
       # using Application Credentials
