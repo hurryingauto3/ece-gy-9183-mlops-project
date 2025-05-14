@@ -1,94 +1,3 @@
-# ---
-# # 0) Install system Kubernetes Python client
-# - name: Install system Kubernetes Python client
-#   ansible.builtin.apt:
-#     name: python3-kubernetes
-#     state: present
-#   become: true
-
-# # 1) Install Helm 3 if it isn't already there
-# - name: Ensure Helm 3 is installed
-#   ansible.builtin.shell: |
-#     if ! command -v helm >/dev/null 2>&1; then
-#       curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-#     fi
-#   args:
-#     executable: /bin/bash
-#   become: true
-
-# # 2) Now we can safely use the Helm modules
-# # - name: Add Argo Workflows Helm repo
-# #   kubernetes.core.helm_repository:
-# #     name: argo-wf
-# #     repo_url: https://argoproj.github.io/argo-helm
-
-# # - name: Install Argo Workflows
-# #   kubernetes.core.helm:
-# #     chart_ref: argo-wf/argo-workflows
-# #     release_name: argo-workflows
-# #     namespace: argo
-# #     create_namespace: false   # namespace already made
-# #     values:
-# #       controller:
-# #         serviceAccount:
-# #           create: true
-
-
-# - name: Ensure ArgoCD namespace exists
-#   kubernetes.core.k8s:
-#     api_version: v1
-#     kind: Namespace
-#     name: argocd
-#     state: present
-#     kubeconfig: /etc/rancher/k3s/k3s.yaml
-
-# # Add the repo
-# - name: Add Argo Workflows Helm repo
-#   kubernetes.core.helm_repository:
-#     name: argo-wf
-#     repo_url: https://argoproj.github.io/argo-helm
-#     kubeconfig: /etc/rancher/k3s/k3s.yaml
-
-# # Install the chart
-# - name: Install Argo Workflows
-#   kubernetes.core.helm:
-#     chart_ref: argo-wf/argo-workflows
-#     release_name: argo-workflows
-#     namespace: argocd
-#     create_namespace: false
-#     values:
-#       controller:
-#         serviceAccount:
-#           create: true
-#     kubeconfig: /etc/rancher/k3s/k3s.yaml
-
-
-# # - name: Wait for ArgoCD server to be ready
-# #   kubernetes.core.k8s_info:
-# #     api_version: apps/v1
-# #     kind: Deployment
-# #     namespace: argocd
-# #     name: argocd-server
-# #   register: argo_svc
-# #   until:
-# #     - argo_svc.resources | length > 0
-# #     - (argo_svc.resources[0].status.readyReplicas | default(0))
-# #       == (argo_svc.resources[0].status.replicas | default(1))
-# #   retries: 12
-# #   delay: 10
-# #   environment:
-# #     KUBECONFIG: "{{ ansible_env.HOME }}/.kube/config"
-
-# - name: Wait for ArgoCD server to finish rolling out
-#   shell: |
-#     kubectl rollout status deployment/argocd-server \
-#       -n argocd \
-#       --kubeconfig=/etc/rancher/k3s/k3s.yaml
-#   register: rollout
-#   retries: 12
-#   delay: 10
-#   until: rollout.rc == 0
-
 ---
 # Install Argo CD server (GitOps UI)
 - name: Ensure argocd namespace exists
@@ -103,13 +12,6 @@
     name: argo
     repo_url: https://argoproj.github.io/argo-helm
 
-# - name: Install Argo CD via Helm
-#   kubernetes.core.helm:
-#     chart_ref: argo/argo-cd
-#     release_name: argo-cd
-#     namespace: argocd
-#     create_namespace: false
-#     kubeconfig: "{{ lookup('env','KUBECONFIG') }}"
 
 - name: Install Argo CD via Helm
   kubernetes.core.helm:
@@ -117,25 +19,7 @@
     release_name: argo-cd
     namespace: argocd
     create_namespace: false
-    wait: true           # ← Helm blocks until all resources are ready
-    timeout: 600         #   (10 min, adjust as desired)
-    kubeconfig: /etc/rancher/k3s/k3s.yaml
-
-
-# - name: Wait for argocd-server rollout to complete
-#   shell: >
-#     kubectl rollout status deployment/argocd-server
-#       -n argocd
-#       --kubeconfig={{ lookup('env','KUBECONFIG') }}
-#   retries: 12
-#   delay: 10
-#   register: rollout_argocd
-#   until: rollout_argocd.rc == 0
-
-# - name: Wait for argocd-server rollout to complete
-#   shell: kubectl rollout status deployment/argo-cd-server -n argocd
-#   register: rollout_argocd
-#   retries: 12
-#   delay: 10
-#   until: rollout_argocd.rc == 0
+    wait: false           # ← Helm blocks until all resources are ready
+    # timeout: 600         #   (10 min, adjust as desired)
+    # kubeconfig: /etc/rancher/k3s/k3s.yaml
 
